@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 版数 | 8.15 |
+| 版数 | 8.19 |
 | 作成日 | 2026-08-11 |
 | 開発体制 | 1名 |
 
@@ -1160,23 +1160,47 @@ Cloudflare のアカウント登録は行わず、公開されているテスト
 | マスタ | `m_seat_types` | 座席種別。名称, 追加料金, 表示クラス |
 | マスタ | `m_seats` | 座席。`theater_id`, `seat_type_id`, `row_label`, `seat_number`, `grid_row`, `grid_col` |
 | マスタ | `m_formats` | 上映規格。名称, `default_surcharge` |
-| マスタ | `m_movies` | 映画。TMDB ID を保持 |
+| マスタ | `m_movies` | 映画。TMDB ID, `original_title`, `genres` を保持 |
 | マスタ | `m_movie_format` | 映画 × 対応上映規格 |
 | マスタ | `m_ticket_types` | 券種マスタ。名称, 価格, 表示順, 適用条件 |
 | マスタ | `m_post_categories` | お知らせカテゴリー |
 | マスタ | `m_admins` | 管理者。`login_id`, `password`, `name`, `role`, `cinema_id`, `is_active` |
 | トランザクション | `t_bookings` | 上映編成。`cinema_id`, `movie_id`, `format_id`, 上映開始日, 上映終了日, `surcharge` |
-| トランザクション | `t_screenings` | 上映回。`booking_id`, `theater_id`, 開始日時, 終了日時 |
+| トランザクション | `t_screenings` | 上映回。`booking_id`, `theater_id`, `created_by_admin_id`(NULL可), 開始日時, 終了日時 |
 | トランザクション | `t_seat_locks` | 座席の一時ロック。`screening_id`, `seat_id`, `holder_key`, `expires_at` |
-| トランザクション | `t_reservations` | 予約。`reservation_no`, `user_id`(NULL可), `guest_name`, `guest_name_kana`, `contact_type`, `guest_email`, `guest_phone`, `screening_id`, `status`, 合計金額, `free_ticket_id`, `entry_code`, `checked_in_at`, `cancelled_at` |
+| トランザクション | `t_reservations` | 予約。`reservation_no`, `user_id`(NULL可), `guest_name`, `guest_name_kana`, `contact_type`, `guest_email`, `guest_phone`, `screening_id`, `status`, 合計金額, `free_ticket_id`, `entry_code`, `stripe_payment_intent_id`, `refunded_at`, `expires_at`, `checked_in_at`, `cancelled_at`, `active_free_ticket_id`(生成列) |
 | トランザクション | `t_reservation_seats` | 予約座席。`reservation_id`, `screening_id`, `seat_id`, `ticket_type_id`, 確定金額, `released_at`, `active_seat_id`(生成列) |
 | トランザクション | `t_stamps` | スタンプ付与履歴。`user_id`, `reservation_id`, `free_ticket_id` |
 | トランザクション | `t_free_tickets` | 無料鑑賞券。`user_id`, `code`, 発行日, 有効期限, 使用日, `reservation_id` |
-| コンテンツ | `c_posts` | お知らせ。`category_id`, `cinema_id`(NULL可), `status`, `published_at` |
+| コンテンツ | `c_posts` | お知らせ。`category_id`, `cinema_id`(NULL可), `created_by_admin_id`(NULL可), `status`, `published_at` |
 | コンテンツ | `c_banners` | バナー。`position`, `image_path`, `link_url`, `alt`, `sort_order`, 公開期間, `cinema_id`(NULL可) |
-| 標準 | `users` | 会員 |
+| 標準 | `users` | 会員。標準列に加え `name_kana`, `phone`, `is_newsletter_subscribed` を追加（7.15） |
 
 操作ログのテーブルは作成しない（5.5）。
+
+**マイグレーション実装時に追加・確定した事項**
+
+本章の一覧作成時点では明記していなかったが、マイグレーション実装時に
+判断し、追加または確定した事項を以下に記録する。
+
+| 対象 | 内容 | 理由 |
+|---|---|---|
+| `t_reservations.stripe_payment_intent_id` | NULL許容・一意で追加 | 決済成功の検証（8.2）および返金（4.4 / 17.3）のために PaymentIntent を再取得するキーが必要 |
+| `t_reservations.refunded_at` | NULL許容で追加 | 返金済みかどうかの判定に用いる。二重返金の防止（17.3-5） |
+| `t_reservations.expires_at` | NULL許容で追加 | 決済画面遷移時の座席ロック延長（6.4.1-4）に合わせて設定する、`pending` 予約自体の期限。B-02（10章）がこの列を基準に `expired` へ更新する |
+| `t_reservations.active_free_ticket_id`（生成列） | `status` が `paid` のとき `free_ticket_id`、それ以外は `NULL` となる生成列とし、一意制約を設定 | 無料鑑賞券は1枚を複数予約へ同時適用できてはならないが、キャンセル時に再利用可能な券へ戻す仕様（4.4 / 4.5.2）のため単純な一意制約が張れない。座席の `released_at` / `active_seat_id`（6.4.2）と同じ考え方を適用した |
+| `t_reservations.contact_type` の値 | `member` / `guest` の2値の backed enum（`App\Enums\ContactType`） | 列名のみで値が未定義だったため確定した |
+| `t_screenings.created_by_admin_id` / `c_posts.created_by_admin_id` | NULL許容の `m_admins` への外部キーとして追加 | 4.8.4 の【根拠】が「管理者を物理削除すると登録した上映回・お知らせとの関連が失われる」ことを無効化の理由に挙げており、この関連を保持する列が必要 |
+| `m_movies.original_title` / `genres`（JSON） | 追加 | 7.5 の表示項目「原題を併記」「ジャンル」に対応。12章の未決事項3（TMDB項目範囲）は表示範囲の調整として引き続き未決とする |
+| `users.name_kana` / `phone` / `is_newsletter_subscribed` | 追加 | 7.15 の会員登録画面がフリガナ・電話番号を必須項目、メールマガジン購読を任意項目としているが、初期の `users` 一覧（6.1.2）に含まれていなかった |
+| 外部キーの削除時制約 | 中間テーブル（`m_theater_format`, `m_movie_format`）と一時データの `t_seat_locks` のみ `cascadeOnDelete()`、それ以外は `restrictOnDelete()` を既定とする | 6.2 の「過去データを削除しない」方針に合わせ、参照先の削除を阻止する側に倒した |
+| `config/app.php` の `timezone` | `env('APP_TIMEZONE', 'UTC')` に修正（従来はハードコードの `'UTC'` で `.env` の値が反映されていなかった） | 3.6 / 13.3 の「DBにも日本時間で保存し、UTC変換を行わない」に反する状態だったため是正 |
+| `users.name_kana` / `phone` / `is_newsletter_subscribed` の追加場所 | 別マイグレーションでの `ALTER` ではなく、`0001_01_01_000000_create_users_table.php`（スターターキット標準の users 作成）に直接追加した | 本フェーズはまだ本番データを持たない基盤構築段階であり、後から追加する ALTER は「既存行があるテーブルへの NOT NULL 追加」という将来的な制約（DBエンジン・行数依存）を持ち込む。作成時点にまとめる方が単純かつ安全 |
+| `Model::preventSilentlyDiscardingAttributes()` | `app/Providers/AppServiceProvider.php` の `configureDefaults()` で、本番以外を対象に有効化した | 状態遷移列（`cancelled_at` 等）を意図的に `$fillable` から外し、直接代入を強制する方針（13.4.7 等）を採る場合、`update([...])` に紛れ込んだ非 fillable キーが本番以外では例外として検出されるようにするため。本番のみ従来通り黙って無視される非対称な挙動になる点に留意する |
+| `t_reservations` の生成列で `status` の比較値に文字列 `paid` を直書き | `App\Enums\ReservationStatus::Paid->value` を式に埋め込んだ（13.3-15 の例外） | マイグレーションは記述時点で確定したDDLの履歴であり、実行時に Enum クラスを参照できない。値を変更する場合は本生成列の式も合わせて変更するマイグレーションを追加すること |
+| `App\Models\Admin` の基底クラス | `Illuminate\Foundation\Auth\User`（`App\Models\User` と同じ基底）を継承させた | 4.8.4 / 17.1.2 が `admin` ガードでの認証を要求しており、Eloquent の認証プロバイダは `Authenticatable` 契約の実装を要する。DB・モデル定義の時点で揃えておけば、認証実装（フェーズ3）での基底クラス差し替えが不要になる |
+| `App\Models\User` の `$table` | `protected $table = 'users';` を明示した | 6.1.1 / 13.2 が全モデルへの明示を求めており、スターターキット由来の `User` のみ省略されていた |
+| `m_formats.name` / `m_seat_types.name` / `m_ticket_types.name` | いずれも一意制約を追加した | 6.6 等で列挙される固定的なマスタ集合であり、シーダー実装時の重複投入をDB側で防ぐため |
 
 ### 6.2 データ保持方針
 
@@ -2004,8 +2028,15 @@ Webhook を実装しないため、異常系では予約が `pending` のまま�
 3. 該当する `t_seat_locks` を削除する
 4. 無料鑑賞券使用時は `t_free_tickets.used_at` を設定する
 
-手順2でユニーク制約違反が発生した場合はロールバックし、
-返金のうえ座席選択からの再実行を促す。
+手順1（`t_reservations.active_free_ticket_id`、6.1.2）または手順2
+（`t_reservation_seats.active_seat_id`、6.4.2）でユニーク制約違反が発生した場合は
+ロールバックし、返金のうえ座席選択からの再実行を促す。
+
+無料鑑賞券は追加料金や同伴者分の代金が残る場合に限り決済フローを通るため（4.5.2）、
+Stripe への課金が成立した後で手順1が失敗する経路が生じうる。
+`ReservationService` は課金前に対象の無料鑑賞券を
+`used_at IS NULL` の条件付きで再検証し、決済失敗ではなく前段の入力エラーとして
+極力早期に弾くこと。それでも競合した場合の最終防波堤が本制約である。
 
 **決済失敗時の扱い**
 
@@ -2132,6 +2163,8 @@ B-03 は `t_stamps.reservation_id` のユニーク制約により多重実行時
 | 3 | 作品詳細に表示する TMDB の項目範囲 | 7.5 |
 | 4 | 座席レイアウト図（画像）の作成方法 | 7.6.3 |
 | 5 | 静的ページの本文（ダミーテキストの内容） | 4.9.1 |
+| 6 | `t_stamps.reservation_id` の一意制約は「1予約=1スタンプ」だが、4.5.1-4 は「無料鑑賞券を使用した席」という席単位の除外を定めている。予約に無料鑑賞券使用席と通常席が混在する場合の付与可否は、スタンプ付与バッチ（B-03）実装時に確定させる | 4.5.1 / 10章 |
+| 7 | 会員の退会機能はスターターキット標準では実装済み（`resources/views/pages/settings/⚡delete-user-*.blade.php`）だが、2.5 / 17.4.4 は非対応と定めている。`t_reservations.user_id` 等を `restrictOnDelete()` としたため、予約・スタンプ・無料鑑賞券を持つ会員が退会するとハンドルされない例外になる。**会員関連機能（F-03以降）の実装に着手する前に、UIを撤去するか17.4.4の匿名化方針に合わせて改修するかを決定すること** | 2.5 / 17.4.4 |
 
 ---
 
@@ -2200,7 +2233,7 @@ routes/
 | 入場コード | `Str::random(32)`。ユニーク制約を設定する |
 | 予約番号 | 8桁の数字。ユニーク制約を設定する |
 | フリガナ | 全角カタカナのみ。バリデーションで制限する |
-| 電話番号 | ハイフンなしの半角数字 |
+| 電話番号 | ハイフンなしの半角数字（会員・非会員の連絡先が対象。`m_cinemas.phone` は表示用の館代表番号のためハイフンを許容する） |
 | 無料鑑賞券コード | `Str::upper(Str::random(12))`。ユニーク制約を設定する |
 | `holder_key` | 会員は `user:{id}`、非会員は `session:{id}` の形式 |
 | 真偽値 | `is_` を接頭辞とする（`is_active`） |
@@ -3115,7 +3148,7 @@ Policy による所有者チェックを必須とする。
 |---|---|---|
 | フリガナ（カタカナ） | 会員・非会員 | 本人照合、窓口での呼び出し |
 | メールアドレス | 会員・非会員 | 予約確定通知、本人照合 |
-| 電話番号 | 非会員 | 本人照合 |
+| 電話番号 | 会員・非会員 | 本人照合、窓口での照会（会員登録の必須項目、7.15） |
 | 予約履歴・入場記録 | 会員・非会員 | スタンプの根拠、実績分析 |
 
 クレジットカード情報および住所は保持しない。

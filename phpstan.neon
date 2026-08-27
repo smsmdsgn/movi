@@ -11,3 +11,12 @@ parameters:
         - routes/
 
     level: 7
+
+    ignoreErrors:
+        -
+            identifier: trait.unused
+            path: app/Concerns/ProfileValidationRules.php
+            message: '#App\\Concerns\\ProfileValidationRules#'
+            # resources/views 配下の Livewire 単一ファイルコンポーネント
+            # （settings/profile.blade.php）でのみ使用しており、
+            # resources/views は paths に含まれないため誤検知となる。
