@@ -474,9 +474,15 @@ git status
 
 ```bash
 git commit -m "chore: プロジェクトの初期構成を作成"
+git branch -m main
 git branch develop
+```
+
+GitHub でリポジトリを作成する。README・.gitignore・ライセンスは追加しない。
+
+```bash
 git remote add origin git@github.com:{ユーザー名}/movi.git
-git push -u origin master
+git push -u origin main
 git push -u origin develop
 ```
 
