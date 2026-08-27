@@ -1,0 +1,26 @@
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: movi-mariadb
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3306:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: movi
+      MARIADB_USER: movi
+      MARIADB_PASSWORD: movi
+      TZ: Asia/Tokyo
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - movi-mariadb:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  movi-mariadb:
