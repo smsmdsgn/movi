@@ -4,14 +4,45 @@ on:
   push:
     branches:
       - main
+      - develop
   pull_request:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ci:
     runs-on: ubuntu-latest
+
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: movi_testing
+          MARIADB_USER: movi
+          MARIADB_PASSWORD: movi
+          TZ: Asia/Tokyo
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+          --health-start-period=30s
+
+    env:
+      DB_CONNECTION: mariadb
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: movi_testing
+      DB_USERNAME: movi
+      DB_PASSWORD: movi
 
     steps:
       - name: Checkout code
@@ -30,6 +61,11 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
+
+      - name: Align test database charset with compose.yaml
+        run: |
+          mysql -h127.0.0.1 -uroot -proot -e \
+            "ALTER DATABASE movi_testing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
       - name: Setup Application
         run: composer setup

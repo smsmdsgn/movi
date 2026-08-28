@@ -388,6 +388,27 @@ GRANT ALL PRIVILEGES ON movi.* TO 'movi'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
+**テスト用データベースの作成**
+
+`php artisan test` は開発用データベース（`movi`）とは別の `movi_testing` に対して実行する
+（テストのたびに `RefreshDatabase` でテーブルを作り直すため、開発用データを保護する）。
+接続情報（ホスト・ユーザー名・パスワード）は `.env` の値をそのまま使うため、
+上記で設定したものと同じ資格情報で `movi_testing` を作成する。
+
+Docker で導入した場合:
+
+```bash
+docker compose exec mariadb mariadb -u root -proot -e "CREATE DATABASE IF NOT EXISTS movi_testing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; GRANT ALL PRIVILEGES ON movi_testing.* TO 'movi'@'%'; FLUSH PRIVILEGES;"
+```
+
+ネイティブに導入した場合（`{パスワード}` は上記で設定した `movi` ユーザーのパスワード）:
+
+```sql
+CREATE DATABASE movi_testing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+GRANT ALL PRIVILEGES ON movi_testing.* TO 'movi'@'localhost';
+FLUSH PRIVILEGES;
+```
+
 ### 4. 環境変数の設定
 
 ```bash
@@ -613,9 +634,13 @@ php artisan view:cache
 ```bash
 vendor/bin/pint --dirty      # コード整形
 vendor/bin/phpstan analyse   # 静的解析
-php artisan test             # テスト
+php artisan test             # テスト（movi_testing データベースに対して実行する）
 git diff --stat              # 変更範囲の確認
 ```
+
+`php artisan test` は MariaDB（`movi_testing`）に対して実行する。生成列や
+ユニークインデックスのNULL挙動（6.4.2）はMariaDB固有のため、SQLiteでは
+正しく検証できない。未作成の場合は「3. データベースの作成」の手順を行うこと。
 
 そのうえで、`.claude/agents/` に定義したレビュー用サブエージェントで
 実装内容と影響範囲を確認する。

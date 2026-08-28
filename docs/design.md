@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 版数 | 8.21 |
+| 版数 | 8.22 |
 | 作成日 | 2026-08-11 |
 | 開発体制 | 1名 |
 
@@ -2350,6 +2350,17 @@ SeatLockService::releaseAll(string $holderKey): void
 **【根拠】** 金銭と排他制御に関わる箇所は、
 誤りが再現しにくく発見が遅れるため、自動テストで検証する。
 
+**実行環境**
+
+`php artisan test` は実際の MariaDB（データベース名 `movi_testing`。開発用の `movi` とは別）に対して実行する。
+生成列とユニークインデックスのNULL重複許容（6.4.2）はMariaDB固有の挙動であり、
+SQLiteでは正しく検証できないため（3.5-4）。ローカルでの作成手順は README を参照。
+GitHub Actions（`.github/workflows/tests.yml`）も同一の `mariadb:10.11` イメージを用いる。
+
+未実装の `SeatLockService` を用いた T-01（同時ロック取得）を実装する際は、
+`RefreshDatabase` がテストをトランザクションで包むため、複数コネクションからの
+同時実行を検証できない点に注意する。`DatabaseTruncation` 等への切り替えを検討すること。
+
 ---
 
 ## 14. スキル定義（Claude Code）
@@ -2814,6 +2825,8 @@ Windows と macOS の2環境で開発するため、環境差を吸収する設�
 | `.editorconfig` | インデント・文字コードの統一 |
 | `pint.json` | コード整形ルール（既定プリセットを使う場合は不要） |
 | `phpstan.neon` | 静的解析の設定 |
+| `phpunit.xml` | テストの実行設定（DB接続を含む。13.6参照） |
+| `.github/workflows/` | CI（GitHub Actions） |
 | `.claude/` | スキル、サブエージェント |
 | `docs/design.md` | 基本設計書 |
 | `.env.example` | 環境変数の雛形 |
