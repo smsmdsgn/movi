@@ -16,6 +16,7 @@ return new class extends Migration
             $table->string('seat_number');
             $table->unsignedInteger('grid_row');
             $table->unsignedInteger('grid_col');
+            $table->boolean('is_available')->default(true);
             $table->timestamps();
 
             $table->unique(['theater_id', 'row_label', 'seat_number']);
