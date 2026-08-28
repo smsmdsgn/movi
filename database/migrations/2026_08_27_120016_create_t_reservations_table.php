@@ -46,7 +46,6 @@ return new class extends Migration
             $table->index('guest_email');
             $table->index('guest_phone');
             $table->index('guest_name_kana');
-            $table->index('guest_name');
         });
     }
 
