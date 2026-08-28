@@ -61,11 +61,9 @@ expect()->extend('toBeOne', function () {
 */
 
 /**
- * 座席の排他制御テスト用に、上映回と座席1件を最小構成で作成する。
- *
- * @return array{0: Screening, 1: Seat}
+ * テスト用の館とシアターを1件作成する。
  */
-function createScreeningWithSeat(): array
+function createTheater(): Theater
 {
     $cinema = Cinema::create([
         'slug' => 'test-cinema-'.Str::random(8),
@@ -79,11 +77,21 @@ function createScreeningWithSeat(): array
         'map_embed_url' => 'https://example.com/map',
     ]);
 
-    $theater = Theater::create([
+    return Theater::create([
         'cinema_id' => $cinema->id,
         'number' => 1,
         'name' => '1番シアター',
     ]);
+}
+
+/**
+ * 座席の排他制御テスト用に、上映回と座席1件を最小構成で作成する。
+ *
+ * @return array{0: Screening, 1: Seat}
+ */
+function createScreeningWithSeat(): array
+{
+    $theater = createTheater();
 
     $seatType = SeatType::create([
         'name' => '一般',
