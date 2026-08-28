@@ -2,22 +2,22 @@
 
 namespace App\Models;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
  * @property int $cinema_id
  * @property int $movie_id
  * @property int $format_id
- * @property Carbon $starts_on
- * @property Carbon $ends_on
+ * @property CarbonImmutable $starts_on
+ * @property CarbonImmutable $ends_on
  * @property int $surcharge
- * @property Carbon|null $created_at
- * @property Carbon|null $updated_at
+ * @property CarbonImmutable|null $created_at
+ * @property CarbonImmutable|null $updated_at
  */
 #[Fillable(['cinema_id', 'movie_id', 'format_id', 'starts_on', 'ends_on', 'surcharge'])]
 class Booking extends Model

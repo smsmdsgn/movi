@@ -3,10 +3,10 @@
 namespace App\Models;
 
 use App\Enums\PostStatus;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -16,9 +16,9 @@ use Illuminate\Support\Carbon;
  * @property string $title
  * @property string $body
  * @property PostStatus $status
- * @property Carbon|null $published_at
- * @property Carbon|null $created_at
- * @property Carbon|null $updated_at
+ * @property CarbonImmutable|null $published_at
+ * @property CarbonImmutable|null $created_at
+ * @property CarbonImmutable|null $updated_at
  */
 #[Fillable(['category_id', 'cinema_id', 'title', 'body', 'status', 'published_at'])]
 class Post extends Model

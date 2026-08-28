@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -14,10 +14,10 @@ use Illuminate\Support\Carbon;
  * @property int $seat_id
  * @property int $ticket_type_id
  * @property int $amount
- * @property Carbon|null $released_at
+ * @property CarbonImmutable|null $released_at
  * @property int|null $active_seat_id
- * @property Carbon|null $created_at
- * @property Carbon|null $updated_at
+ * @property CarbonImmutable|null $created_at
+ * @property CarbonImmutable|null $updated_at
  */
 #[Fillable(['reservation_id', 'screening_id', 'seat_id', 'ticket_type_id', 'amount'])]
 class ReservationSeat extends Model

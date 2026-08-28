@@ -4,13 +4,13 @@ namespace App\Models;
 
 use App\Enums\ContactType;
 use App\Enums\ReservationStatus;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -27,13 +27,13 @@ use Illuminate\Support\Carbon;
  * @property int|null $free_ticket_id
  * @property string|null $entry_code
  * @property string|null $stripe_payment_intent_id
- * @property Carbon|null $refunded_at
- * @property Carbon|null $expires_at
- * @property Carbon|null $checked_in_at
- * @property Carbon|null $cancelled_at
+ * @property CarbonImmutable|null $refunded_at
+ * @property CarbonImmutable|null $expires_at
+ * @property CarbonImmutable|null $checked_in_at
+ * @property CarbonImmutable|null $cancelled_at
  * @property int|null $active_free_ticket_id
- * @property Carbon|null $created_at
- * @property Carbon|null $updated_at
+ * @property CarbonImmutable|null $created_at
+ * @property CarbonImmutable|null $updated_at
  */
 #[Fillable([
     'reservation_no', 'user_id', 'guest_name', 'guest_name_kana', 'contact_type',

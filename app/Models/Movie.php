@@ -2,11 +2,11 @@
 
 namespace App\Models;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -16,10 +16,10 @@ use Illuminate\Support\Carbon;
  * @property string $synopsis
  * @property string|null $poster_path
  * @property int $runtime_minutes
- * @property Carbon $released_on
+ * @property CarbonImmutable $released_on
  * @property array<int, string>|null $genres
- * @property Carbon|null $created_at
- * @property Carbon|null $updated_at
+ * @property CarbonImmutable|null $created_at
+ * @property CarbonImmutable|null $updated_at
  */
 #[Fillable(['tmdb_id', 'title', 'original_title', 'synopsis', 'poster_path', 'runtime_minutes', 'released_on', 'genres'])]
 class Movie extends Model

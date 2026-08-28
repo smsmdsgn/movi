@@ -3,11 +3,11 @@
 namespace App\Models;
 
 use App\Enums\AdminRole;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -18,8 +18,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $cinema_id
  * @property bool $is_active
  * @property string|null $remember_token
- * @property Carbon|null $created_at
- * @property Carbon|null $updated_at
+ * @property CarbonImmutable|null $created_at
+ * @property CarbonImmutable|null $updated_at
  */
 #[Fillable(['login_id', 'password', 'name', 'role', 'cinema_id', 'is_active'])]
 #[Hidden(['password', 'remember_token'])]

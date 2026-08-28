@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 版数 | 8.23 |
+| 版数 | 8.24 |
 | 作成日 | 2026-08-11 |
 | 開発体制 | 1名 |
 
@@ -1201,6 +1201,8 @@ Cloudflare のアカウント登録は行わず、公開されているテスト
 | `App\Models\Admin` の基底クラス | `Illuminate\Foundation\Auth\User`（`App\Models\User` と同じ基底）を継承させた | 4.8.4 / 17.1.2 が `admin` ガードでの認証を要求しており、Eloquent の認証プロバイダは `Authenticatable` 契約の実装を要する。DB・モデル定義の時点で揃えておけば、認証実装（フェーズ3）での基底クラス差し替えが不要になる |
 | `App\Models\User` の `$table` | `protected $table = 'users';` を明示した | 6.1.1 / 13.2 が全モデルへの明示を求めており、スターターキット由来の `User` のみ省略されていた |
 | `m_formats.name` / `m_seat_types.name` / `m_ticket_types.name` | いずれも一意制約を追加した | 6.6 等で列挙される固定的なマスタ集合であり、シーダー実装時の重複投入をDB側で防ぐため |
+| 全モデルの `@property` の日時型 | `Illuminate\Support\Carbon` から `Carbon\CarbonImmutable` に修正した | `AppServiceProvider` で `Date::use(CarbonImmutable::class)` を設定しており、実際に返る型と PHPDoc が一致していなかったため |
+| `Model::preventLazyLoading()` | `AppServiceProvider::configureDefaults()` に、本番以外を対象に追加した | 5.3-1（上映回一覧の残席数を一括集計クエリで取得しN+1を発生させない）の趣旨をアプリ全体へ拡張して適用した。検出する仕組みがなかったため、遅延ロードが発生すると本番以外では例外になるようにした。一覧で関連を先読みする（`with()`）規約自体は13章に未記載であり、別途書き起こしが必要 |
 | インデックスの棚卸し | `t_reservations.guest_name` の索引を削除した。`guest_email`（4.3.5 方式Bの駆動キー。方式Aは `reservation_no` の一意制約で1行に絞れるため効かない）、`guest_phone` / `guest_name_kana`（4.8.5 予約検索のキー）、`users.name_kana` / `phone`（4.3.5・4.8.5。会員予約は `guest_*` が空のため `users` 側を対象とする）は維持する | 外部レビューで「用途不明な索引」の洗い出しを指摘された。4.8.1（旧「氏名」）と17.2.2（旧「連絡先・氏名」）が4.8.5・4.3.5の詳細仕様（フリガナ／メールアドレス・電話番号）と食い違っていたため、詳細仕様側を正として4.8.1・17.2.2の文言を是正したうえで、氏名（非カナ）は検索キーに含まれないことを確認し削除した。**残された前提**: フリガナ検索が前方一致・完全一致であること（部分一致（`LIKE '%…%'`）では索引が効かない。4.8.5に未規定）。`t_reservations`と`users`を横断する検索は、`OR`ではなく`UNION`で書かないと索引が効かない。`screening_id`/`cinema_id`/`theater_id`単体はFK制約により自動で索引化されるため、複合索引の左端と重複するが削除しない（得るものが小さいため据え置き）。本行の変更は `2026_08_27_120016` （適用済みの場合あり）への直接編集のため、他端末では `migrate:fresh` が必要 |
 | 会員の退会機能（スターターキット標準UI） | 撤去した。`resources/views/pages/settings/⚡delete-user-*.blade.php` および対応するテストを削除。2.5.1 の該当行に、退会希望者への代替導線（マイページでの窓口案内、7.14 構成要素5で対応）を追記した | 2.5.1 / 17.4.4 が退会機能を対象外としており、`t_reservations.user_id` 等を `restrictOnDelete()` としたこと（本表）と両立しないため。外部レビューで指摘され対応した |
 
