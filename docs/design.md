@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 版数 | 8.24 |
+| 版数 | 8.25 |
 | 作成日 | 2026-08-11 |
 | 開発体制 | 1名 |
 
@@ -577,7 +577,9 @@ Composer の導入手順など）は、アプリケーションの設計に影�
 
 1. `status` を `cancelled` に更新し、`cancelled_at` を設定する
 2. 座席を再販可能な状態に戻す（6.4.2）
-3. 無料鑑賞券を使用していた場合は `used_at` を `null` に戻す
+3. 無料鑑賞券を使用していた場合は再利用可能に戻す（`t_reservations.active_free_ticket_id`
+   は `status` の変更により生成列として自動的に解除される。6.1.2「無料鑑賞券の使用状態の
+   管理方式」参照。フェーズ5までは `t_free_tickets.used_at` を `null` に戻す現行方式も残る）
 4. Stripe で返金処理を行う
 
 スタンプは上映開始時に付与するため（4.5.1）、キャンセル時点では未付与であり取消処理を要さない。
@@ -1197,6 +1199,7 @@ Cloudflare のアカウント登録は行わず、公開されているテスト
 | `config/app.php` の `timezone` | `env('APP_TIMEZONE', 'UTC')` に修正（従来はハードコードの `'UTC'` で `.env` の値が反映されていなかった） | 3.6 / 13.3 の「DBにも日本時間で保存し、UTC変換を行わない」に反する状態だったため是正 |
 | `users.name_kana` / `phone` / `is_newsletter_subscribed` の追加場所 | 別マイグレーションでの `ALTER` ではなく、`0001_01_01_000000_create_users_table.php`（スターターキット標準の users 作成）に直接追加した | 本フェーズはまだ本番データを持たない基盤構築段階であり、後から追加する ALTER は「既存行があるテーブルへの NOT NULL 追加」という将来的な制約（DBエンジン・行数依存）を持ち込む。作成時点にまとめる方が単純かつ安全 |
 | `Model::preventSilentlyDiscardingAttributes()` | `app/Providers/AppServiceProvider.php` の `configureDefaults()` で、本番以外を対象に有効化した | 状態遷移列（`cancelled_at` 等）を意図的に `$fillable` から外し、直接代入を強制する方針（13.4.7 等）を採る場合、`update([...])` に紛れ込んだ非 fillable キーが本番以外では例外として検出されるようにするため。本番のみ従来通り黙って無視される非対称な挙動になる点に留意する |
+| `Reservation.$fillable` の `status` | 現状は fillable のまま残している（`cancelled_at` / `checked_in_at` / `refunded_at` は除外済み） | `ReservationService` 実装時に、状態遷移は直接代入で統一する方針（上記）に揃え、`status` も `$fillable` から外すこと。現時点で外すと `tests/Pest.php` のヘルパ（`createPaidReservation()` 等、`status` を含めて `create()` している）が動かなくなるため、`ReservationService` 側でのモデル生成方法（`create()` ではなく個別代入等）を確定させる段階でまとめて対応する |
 | `t_reservations` の生成列で `status` の比較値に文字列 `paid` を直書き | `App\Enums\ReservationStatus::Paid->value` を式に埋め込んだ（13.3-15 の例外） | マイグレーションは記述時点で確定したDDLの履歴であり、実行時に Enum クラスを参照できない。値を変更する場合は本生成列の式も合わせて変更するマイグレーションを追加すること |
 | `App\Models\Admin` の基底クラス | `Illuminate\Foundation\Auth\User`（`App\Models\User` と同じ基底）を継承させた | 4.8.4 / 17.1.2 が `admin` ガードでの認証を要求しており、Eloquent の認証プロバイダは `Authenticatable` 契約の実装を要する。DB・モデル定義の時点で揃えておけば、認証実装（フェーズ3）での基底クラス差し替えが不要になる |
 | `App\Models\User` の `$table` | `protected $table = 'users';` を明示した | 6.1.1 / 13.2 が全モデルへの明示を求めており、スターターキット由来の `User` のみ省略されていた |
@@ -1204,6 +1207,7 @@ Cloudflare のアカウント登録は行わず、公開されているテスト
 | 全モデルの `@property` の日時型 | `Illuminate\Support\Carbon` から `Carbon\CarbonImmutable` に修正した | `AppServiceProvider` で `Date::use(CarbonImmutable::class)` を設定しており、実際に返る型と PHPDoc が一致していなかったため |
 | `Model::preventLazyLoading()` | `AppServiceProvider::configureDefaults()` に、本番以外を対象に追加した | 5.3-1（上映回一覧の残席数を一括集計クエリで取得しN+1を発生させない）の趣旨をアプリ全体へ拡張して適用した。検出する仕組みがなかったため、遅延ロードが発生すると本番以外では例外になるようにした。一覧で関連を先読みする（`with()`）規約自体は13章に未記載であり、別途書き起こしが必要 |
 | インデックスの棚卸し | `t_reservations.guest_name` の索引を削除した。`guest_email`（4.3.5 方式Bの駆動キー。方式Aは `reservation_no` の一意制約で1行に絞れるため効かない）、`guest_phone` / `guest_name_kana`（4.8.5 予約検索のキー）、`users.name_kana` / `phone`（4.3.5・4.8.5。会員予約は `guest_*` が空のため `users` 側を対象とする）は維持する | 外部レビューで「用途不明な索引」の洗い出しを指摘された。4.8.1（旧「氏名」）と17.2.2（旧「連絡先・氏名」）が4.8.5・4.3.5の詳細仕様（フリガナ／メールアドレス・電話番号）と食い違っていたため、詳細仕様側を正として4.8.1・17.2.2の文言を是正したうえで、氏名（非カナ）は検索キーに含まれないことを確認し削除した。**残された前提**: フリガナ検索が前方一致・完全一致であること（部分一致（`LIKE '%…%'`）では索引が効かない。4.8.5に未規定）。`t_reservations`と`users`を横断する検索は、`OR`ではなく`UNION`で書かないと索引が効かない。`screening_id`/`cinema_id`/`theater_id`単体はFK制約により自動で索引化されるため、複合索引の左端と重複するが削除しない（得るものが小さいため据え置き）。本行の変更は `2026_08_27_120016` （適用済みの場合あり）への直接編集のため、他端末では `migrate:fresh` が必要 |
+| 無料鑑賞券の使用状態の管理方式 | `t_free_tickets.used_at` / `reservation_id` を廃止し、使用状態は `t_reservations.active_free_ticket_id`（6.4.2）を単一の真実源として判定する方式に変更する（実装はフェーズ5、`ReservationService` 実装時）。この券を個別に一覧表示する画面が必要になった場合は、`t_free_tickets` を `t_reservations.active_free_ticket_id` に `LEFT JOIN` し、一致がなければ未使用と判定する形で導出する。現行の 7.14 構成要素1「無料鑑賞券の保有枚数と有効期限」はサマリ表示にとどまり個別一覧を要求していないため、7.14 側の追記は本方針の実装とあわせて必要になった時点で行う | `t_free_tickets` 側と `t_reservations` 側が同じ関係（どの券がどの予約で使われたか）を双方向に保持しており、同期を保証する仕組みがなかった。4.4-3「キャンセル時に `used_at` を `null` に戻す」処理は `t_reservations` 側では生成列により自動反映されるが、`t_free_tickets.used_at` / `reservation_id` は明示的な更新を要し、更新漏れがあると2箇所の状態が食い違う。座席の排他制御（6.4.1〜6.4.2）で採用した「DB制約による単一の真実源」という方針に揃え、キャッシュ的な列を持たない設計とした。8.2 / 4.4 は現行の `used_at` 方式のまま残っているため、フェーズ5で本方式に置き換える旨を両節に追記した |
 | 会員の退会機能（スターターキット標準UI） | 撤去した。`resources/views/pages/settings/⚡delete-user-*.blade.php` および対応するテストを削除。2.5.1 の該当行に、退会希望者への代替導線（マイページでの窓口案内、7.14 構成要素5で対応）を追記した | 2.5.1 / 17.4.4 が退会機能を対象外としており、`t_reservations.user_id` 等を `restrictOnDelete()` としたこと（本表）と両立しないため。外部レビューで指摘され対応した |
 
 ### 6.2 データ保持方針
@@ -2042,9 +2046,15 @@ Webhook を実装しないため、異常系では予約が `pending` のまま�
 
 無料鑑賞券は追加料金や同伴者分の代金が残る場合に限り決済フローを通るため（4.5.2）、
 Stripe への課金が成立した後で手順1が失敗する経路が生じうる。
-`ReservationService` は課金前に対象の無料鑑賞券を
-`used_at IS NULL` の条件付きで再検証し、決済失敗ではなく前段の入力エラーとして
-極力早期に弾くこと。それでも競合した場合の最終防波堤が本制約である。
+`ReservationService` は課金前に対象の無料鑑賞券が未使用であることを再検証し、
+決済失敗ではなく前段の入力エラーとして極力早期に弾くこと。
+それでも競合した場合の最終防波堤が本制約である。
+
+**注意（フェーズ5で置き換え予定）**: 手順4の `t_free_tickets.used_at` による管理、
+および上記の未使用判定は、6.1.2 追記表「無料鑑賞券の使用状態の管理方式」の
+結論により、`t_reservations.active_free_ticket_id` を単一の真実源とする方式へ
+置き換える予定である。`ReservationService` 実装時は本節ではなく 6.1.2 の結論を
+一次情報とすること。
 
 **決済失敗時の扱い**
 
@@ -2321,6 +2331,12 @@ SeatLockService::releaseAll(string $holderKey): void
 予約確定は `ReservationService` に集約し、単一トランザクションで実行する（8.2）。
 ユニーク制約違反は例外として捕捉し、返金処理を行ったうえで
 座席選択画面へ誘導する。
+
+`t_reservation_seats.seat_id` が選択中の上映回のシアターに属することは、
+DB制約では表現しない（複合外部キーは割に合わない）。`ReservationService` が
+確定前に検証すること。13.6 のテスト方針には無い観点のため、`ReservationService`
+実装時に「他シアターの座席IDを渡すと拒否される」ケースをテスト項目として追加すること
+（`SeatLockService` の並行ロック取得を検証する T-01 とは対象・観点が異なる）。
 
 ### 13.5 UI実装規約
 
