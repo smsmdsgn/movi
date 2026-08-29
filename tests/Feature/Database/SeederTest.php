@@ -2,6 +2,7 @@
 
 use App\Models\Cinema;
 use App\Models\Format;
+use App\Models\Movie;
 use App\Models\Seat;
 use App\Models\SeatType;
 use App\Models\Theater;
@@ -90,6 +91,27 @@ test('the total generated seat count matches the fixed configuration', function 
     expect(Seat::count())->toBe(4880);
 });
 
+test('seeding creates the fixed movie pool with format associations', function () {
+    Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
+
+    expect(Movie::count())->toBe(count(SeedConfig::MOVIES));
+
+    // 2Dのみの作品（追加規格なし）
+    $oldFilm = Movie::where('title', '潮騒の記憶')->firstOrFail();
+    expect($oldFilm->formats()->pluck('name')->all())->toBe(['2D']);
+
+    // 2D + GRAND + 3D + MOTION の大作
+    $blockbuster = Movie::where('title', 'アステロイド・ゼロ')->firstOrFail();
+    expect($blockbuster->formats()->pluck('name')->sort()->values()->all())
+        ->toBe(['2D', 'MOVI 3D', 'MOVI GRAND', 'MOVI MOTION']);
+
+    // SeedConfig::MOVIES の formats（2D以外の追加規格）が1件も取りこぼされていないことを
+    // m_movie_format の総行数から確認する（whereIn に未定義の規格名を書いても例外にならず
+    // 静かに取りこぼすため）
+    $expectedPivotRows = collect(SeedConfig::MOVIES)->sum(fn ($movie) => 1 + count($movie['formats']));
+    expect(DB::table('m_movie_format')->count())->toBe($expectedPivotRows);
+});
+
 test('running the seeder twice does not duplicate any data', function () {
     Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
     $counts = [
@@ -100,7 +122,9 @@ test('running the seeder twice does not duplicate any data', function () {
         TicketType::count(),
         Seat::count(),
         User::count(),
+        Movie::count(),
         DB::table('m_theater_format')->count(),
+        DB::table('m_movie_format')->count(),
     ];
 
     Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
@@ -113,6 +137,8 @@ test('running the seeder twice does not duplicate any data', function () {
         TicketType::count(),
         Seat::count(),
         User::count(),
+        Movie::count(),
         DB::table('m_theater_format')->count(),
+        DB::table('m_movie_format')->count(),
     ])->toBe($counts);
 });

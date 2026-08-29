@@ -179,4 +179,37 @@ class SeedConfig
     public const string BUSINESS_HOURS = '8:00〜23:55';
 
     public const string CINEMA_PHONE = '123-4567-8900';
+
+    /**
+     * 上映作品プール（docs/design.md 9.1「上映作品」）。すべて架空の作品。
+     * `tmdb_id` は実在のTMDB IDと衝突しないダミー値（900000001〜。TMDBの実IDは
+     * 2026年時点で数百万台のため、9億台であれば当面衝突しない）。
+     * 実在の作品ではないため `poster_path` は保持しない（フェーズ4以降でプレースホルダ画像を検討）。
+     * 公開年を1978〜2026年に分散させ、祇園ムビの「旧作・特集上映」（9.1）に対応する。
+     * `formats` は2D以外に対応する追加規格（6.6）。全作品が2Dに対応する前提のため含めない。
+     *
+     * @var array<int, array{tmdb_id: int, title: string, synopsis: string, runtime_minutes: int, released_on: string, genres: array<int, string>, formats: array<int, string>}>
+     */
+    public const array MOVIES = [
+        ['tmdb_id' => 900000001, 'title' => '潮騒の記憶', 'synopsis' => '漁村を舞台に、幼なじみの再会と別れを描く青春群像劇。', 'runtime_minutes' => 108, 'released_on' => '1978-06-10', 'genres' => ['ドラマ'], 'formats' => []],
+        ['tmdb_id' => 900000002, 'title' => '硝子の街', 'synopsis' => '硝子工場の火災事故の真相を追う新聞記者を描くサスペンス。', 'runtime_minutes' => 115, 'released_on' => '1985-09-21', 'genres' => ['ミステリー'], 'formats' => []],
+        ['tmdb_id' => 900000003, 'title' => '遠い花火', 'synopsis' => '離ればなれになった恋人たちが、故郷の花火大会で再会する。', 'runtime_minutes' => 102, 'released_on' => '1991-08-03', 'genres' => ['ドラマ', '恋愛'], 'formats' => []],
+        ['tmdb_id' => 900000004, 'title' => '竜の眠る山', 'synopsis' => '伝説の竜を探す少年と旅の一座が、山間の集落で謎に挑む。', 'runtime_minutes' => 128, 'released_on' => '2003-04-18', 'genres' => ['ファンタジー', '冒険'], 'formats' => ['MOVI VIVID']],
+        ['tmdb_id' => 900000005, 'title' => '蒼穹のパイロット', 'synopsis' => '戦後復興期を舞台に、飛行機乗りたちの誇りと友情を描く。', 'runtime_minutes' => 132, 'released_on' => '2011-07-15', 'genres' => ['アクション'], 'formats' => ['MOVI GRAND', 'MOVI 3D']],
+        ['tmdb_id' => 900000006, 'title' => '深海のラビリンス', 'synopsis' => '深海探査船が未知の生命体と遭遇するSFスリラー。', 'runtime_minutes' => 118, 'released_on' => '2015-11-06', 'genres' => ['SF', 'スリラー'], 'formats' => ['MOVI 3D']],
+        ['tmdb_id' => 900000007, 'title' => 'あの日の教室', 'synopsis' => '同窓会をきっかけに、教師と教え子たちの20年前の約束が動き出す。', 'runtime_minutes' => 110, 'released_on' => '2017-05-12', 'genres' => ['ドラマ'], 'formats' => []],
+        ['tmdb_id' => 900000008, 'title' => '調律師のラプソディ', 'synopsis' => '各地の音楽祭を旅する、音楽家見習いの少女と仲間たちを描くロードムービー・アニメーション。', 'runtime_minutes' => 105, 'released_on' => '2018-03-09', 'genres' => ['アニメーション', '音楽'], 'formats' => ['MOVI GRAND', 'MOVI VIVID']],
+        ['tmdb_id' => 900000009, 'title' => '忘れられた灯台', 'synopsis' => '孤島の灯台守が遺した日記から、村に隠された秘密が明らかになる。', 'runtime_minutes' => 121, 'released_on' => '2019-10-25', 'genres' => ['ミステリー', 'ドラマ'], 'formats' => []],
+        ['tmdb_id' => 900000010, 'title' => '真夏のパレード', 'synopsis' => '商店街の夏祭り再興を目指す家族のドタバタコメディ。', 'runtime_minutes' => 98, 'released_on' => '2020-08-07', 'genres' => ['コメディ', '家族'], 'formats' => ['MOVI VIVID']],
+        ['tmdb_id' => 900000011, 'title' => '雪解けの街で', 'synopsis' => '転勤先の雪国で出会った二人が、季節の移ろいとともに距離を縮める。', 'runtime_minutes' => 112, 'released_on' => '2021-02-14', 'genres' => ['恋愛', 'ドラマ'], 'formats' => []],
+        ['tmdb_id' => 900000012, 'title' => 'アステロイド・ゼロ', 'synopsis' => '地球に接近する小惑星を止めるため、宇宙飛行士チームが決死の作戦に挑む。', 'runtime_minutes' => 140, 'released_on' => '2022-07-01', 'genres' => ['SF', 'アクション'], 'formats' => ['MOVI GRAND', 'MOVI 3D', 'MOVI MOTION']],
+        ['tmdb_id' => 900000013, 'title' => '最後の走者', 'synopsis' => '故障を乗り越え最後の大会に挑む陸上選手と、支えるコーチの物語。', 'runtime_minutes' => 119, 'released_on' => '2022-11-11', 'genres' => ['スポーツ', 'ドラマ'], 'formats' => ['MOVI VIVID']],
+        ['tmdb_id' => 900000014, 'title' => '月夜のオーケストラ', 'synopsis' => '解散寸前のアマチュア楽団が、最後の演奏会に向けて再び集う。', 'runtime_minutes' => 108, 'released_on' => '2023-04-21', 'genres' => ['音楽', 'ドラマ'], 'formats' => ['MOVI VIVID']],
+        ['tmdb_id' => 900000015, 'title' => '怪盗ノワール', 'synopsis' => '美術館を舞台にした怪盗と刑事の頭脳戦を描くケイパー・アクション。', 'runtime_minutes' => 125, 'released_on' => '2023-09-15', 'genres' => ['アクション', 'コメディ'], 'formats' => ['MOVI GRAND', 'MOVI 3D']],
+        ['tmdb_id' => 900000016, 'title' => '森の番人たち', 'synopsis' => '山道で迷子になった少女が、森に暮らす小さな精霊たちの手を借りて家路を探すアニメーション。', 'runtime_minutes' => 99, 'released_on' => '2024-03-20', 'genres' => ['アニメーション', 'ファンタジー', '家族'], 'formats' => ['MOVI GRAND', 'MOVI VIVID', 'MOVI 3D']],
+        ['tmdb_id' => 900000017, 'title' => '灼熱のカウントダウン', 'synopsis' => '爆発事故が相次ぐ石油プラントで、技術者が制限時間内に真犯人を追う。', 'runtime_minutes' => 135, 'released_on' => '2024-08-09', 'genres' => ['アクション', 'スリラー'], 'formats' => ['MOVI GRAND', 'MOVI 3D', 'MOVI MOTION']],
+        ['tmdb_id' => 900000018, 'title' => '静かな声', 'synopsis' => '聴覚を失った作曲家が、新しい表現方法を見つけるまでを静かに描く。', 'runtime_minutes' => 106, 'released_on' => '2025-01-17', 'genres' => ['ドラマ'], 'formats' => []],
+        ['tmdb_id' => 900000019, 'title' => '巨獣戦線', 'synopsis' => '巨大生物の出現に立ち向かう防衛部隊を描くスペクタクル大作。', 'runtime_minutes' => 142, 'released_on' => '2025-07-04', 'genres' => ['アクション', 'SF'], 'formats' => ['MOVI GRAND', 'MOVI 3D', 'MOVI MOTION']],
+        ['tmdb_id' => 900000020, 'title' => '桜、また咲く頃に', 'synopsis' => '祖母の遺した手紙をきっかけに、孫娘が家族の歴史をたどる物語。', 'runtime_minutes' => 115, 'released_on' => '2026-03-27', 'genres' => ['ドラマ', '恋愛'], 'formats' => ['MOVI VIVID']],
+    ];
 }

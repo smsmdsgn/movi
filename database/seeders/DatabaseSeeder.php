@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             MasterDataSeeder::class,
             GionSeeder::class,
             GeneratedCinemaSeeder::class,
+            MovieSeeder::class,
         ]);
 
         if (! User::where('email', 'test@example.com')->exists()) {
