@@ -9,12 +9,28 @@ use App\Models\Theater;
 use App\Models\TicketType;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
+use Database\Seeders\GeneratedCinemaSeeder;
+use Database\Seeders\GionSeeder;
+use Database\Seeders\MasterDataSeeder;
+use Database\Seeders\MovieSeeder;
 use Database\Seeders\SeedConfig;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * 館・シアター・座席のみを対象とするテスト用に、上映作品・上映編成・上映回を
+ * 投入しない範囲でシーダーを実行する（ScreeningSeeder は45シアター全体で約36秒かかり、
+ * 本テストの関心事ではないため）。
+ */
+function seedCinemasAndSeatsOnly(): void
+{
+    Artisan::call('db:seed', ['--class' => MasterDataSeeder::class, '--force' => true]);
+    Artisan::call('db:seed', ['--class' => GionSeeder::class, '--force' => true]);
+    Artisan::call('db:seed', ['--class' => GeneratedCinemaSeeder::class, '--force' => true]);
+}
+
 test('seeding creates the fixed master data', function () {
-    Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
+    seedCinemasAndSeatsOnly();
 
     expect(Format::count())->toBe(count(SeedConfig::FORMATS));
     expect(SeatType::count())->toBe(count(SeedConfig::SEAT_TYPES));
@@ -22,7 +38,7 @@ test('seeding creates the fixed master data', function () {
 });
 
 test('seeding creates 7 cinemas with the fixed theater counts per cinema', function () {
-    Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
+    seedCinemasAndSeatsOnly();
 
     expect(Cinema::count())->toBe(7);
 
@@ -36,13 +52,13 @@ test('seeding creates 7 cinemas with the fixed theater counts per cinema', funct
 });
 
 test('every theater has seats generated', function () {
-    Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
+    seedCinemasAndSeatsOnly();
 
     expect(Theater::doesntHave('seats')->exists())->toBeFalse();
 });
 
 test('every generated theater supports 2D in addition to its assigned formats', function () {
-    Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
+    seedCinemasAndSeatsOnly();
 
     $theaterWithoutTwoD = Theater::whereDoesntHave('formats', fn ($q) => $q->where('name', '2D'))->exists();
 
@@ -50,7 +66,7 @@ test('every generated theater supports 2D in addition to its assigned formats', 
 });
 
 test('gion theater 1 supports MOVI GRAND and MOVI VIVID in addition to 2D', function () {
-    Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
+    seedCinemasAndSeatsOnly();
 
     $theater = Cinema::where('slug', 'gion')->firstOrFail()->theaters()->where('number', 1)->firstOrFail();
 
@@ -59,7 +75,7 @@ test('gion theater 1 supports MOVI GRAND and MOVI VIVID in addition to 2D', func
 });
 
 test('MOVI MOTION is only assigned to shijo-kawaramachi, kyoto, and nijo', function () {
-    Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
+    seedCinemasAndSeatsOnly();
 
     $slugs = Theater::whereHas('formats', fn ($q) => $q->where('name', 'MOVI MOTION'))
         ->with('cinema')
@@ -74,7 +90,7 @@ test('MOVI MOTION is only assigned to shijo-kawaramachi, kyoto, and nijo', funct
 });
 
 test('fushimi has no executive seats because none of its theaters are L scale or larger', function () {
-    Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
+    seedCinemasAndSeatsOnly();
 
     $executiveSeatTypeId = SeatType::where('name', SeedConfig::SEAT_TYPE_EXECUTIVE)->value('id');
 
@@ -86,13 +102,14 @@ test('fushimi has no executive seats because none of its theaters are L scale or
 });
 
 test('the total generated seat count matches the fixed configuration', function () {
-    Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
+    seedCinemasAndSeatsOnly();
 
     expect(Seat::count())->toBe(4880);
 });
 
 test('seeding creates the fixed movie pool with format associations', function () {
-    Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
+    Artisan::call('db:seed', ['--class' => MasterDataSeeder::class, '--force' => true]);
+    Artisan::call('db:seed', ['--class' => MovieSeeder::class, '--force' => true]);
 
     expect(Movie::count())->toBe(count(SeedConfig::MOVIES));
 
@@ -112,7 +129,7 @@ test('seeding creates the fixed movie pool with format associations', function (
     expect(DB::table('m_movie_format')->count())->toBe($expectedPivotRows);
 });
 
-test('running the seeder twice does not duplicate any data', function () {
+test('running the full seeder twice does not duplicate any data', function () {
     Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
     $counts = [
         Cinema::count(),
@@ -125,6 +142,8 @@ test('running the seeder twice does not duplicate any data', function () {
         Movie::count(),
         DB::table('m_theater_format')->count(),
         DB::table('m_movie_format')->count(),
+        DB::table('t_bookings')->count(),
+        DB::table('t_screenings')->count(),
     ];
 
     Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
@@ -140,5 +159,7 @@ test('running the seeder twice does not duplicate any data', function () {
         Movie::count(),
         DB::table('m_theater_format')->count(),
         DB::table('m_movie_format')->count(),
+        DB::table('t_bookings')->count(),
+        DB::table('t_screenings')->count(),
     ])->toBe($counts);
-});
+})->group('slow');

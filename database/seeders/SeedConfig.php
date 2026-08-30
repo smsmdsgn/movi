@@ -64,7 +64,8 @@ class SeedConfig
 
     /**
      * シーダーで生成する6館。シアター番号は規模の大きい順（docs/design.md 6.3.3）。
-     * 祇園ムビは手動データのため含まない（GionSeeder）。
+     * 祇園ムビは館・シアター・座席が手動データのため含まない（GionSeeder）。
+     * 上映編成・上映回（ScreeningSeeder）は祇園ムビも含む全7館が対象（9.1参照）。
      *
      * @var array<string, array{name: string, station: string, address: string, concept: string, theaters: array<int, string>}>
      */
@@ -179,6 +180,35 @@ class SeedConfig
     public const string BUSINESS_HOURS = '8:00〜23:55';
 
     public const string CINEMA_PHONE = '123-4567-8900';
+
+    /**
+     * 上映編成・上映回の生成規模（docs/design.md 9.2 / 9.3-3）。
+     * 生成期間は `now()` を基準とした相対値（過去2年〜未来2週間）。
+     */
+    public const int GENERATION_PAST_YEARS = 2;
+
+    public const int GENERATION_FUTURE_WEEKS = 2;
+
+    /** 1つの上映編成（t_bookings）が続く日数（典型的な上映期間の目安）。 */
+    public const int BOOKING_RUN_DAYS = 14;
+
+    /** 1日の最初の上映回の開始時刻（4.1.1の営業時間8:00〜23:55の範囲内）。 */
+    public const string DAILY_FIRST_SCREENING_TIME = '10:00';
+
+    /** 営業終了時刻。この時刻を超えて上映が終わる回は作らない。 */
+    public const string DAILY_LAST_SCREENING_END_TIME = '23:55';
+
+    /** 予告編の時間（分）。上映回の終了時刻の自動計算に使う（4.8.3-3）。 */
+    public const int TRAILER_MINUTES = 15;
+
+    /** 同一シアターの上映回どうしに空ける最小間隔（分、清掃・入替時間。4.8.3-4）。 */
+    public const int SCREENING_INTERVAL_MINUTES = 30;
+
+    /** 直近公開の作品群（対象は公開済み作品の上位1/N）から選ぶ確率（%）。9.1「公開年の新しい作品を優先する」の近似に使う。 */
+    public const int RECENT_MOVIE_BIAS_PERCENT = 70;
+
+    /** 「直近公開の作品群」とみなす件数を、公開済み作品数の何分の1とするか。 */
+    public const int RECENT_MOVIE_POOL_DIVISOR = 2;
 
     /**
      * 上映作品プール（docs/design.md 9.1「上映作品」）。すべて架空の作品。
