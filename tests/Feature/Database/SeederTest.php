@@ -1,8 +1,11 @@
 <?php
 
+use App\Enums\AdminRole;
+use App\Models\Admin;
 use App\Models\Cinema;
 use App\Models\Format;
 use App\Models\Movie;
+use App\Models\PostCategory;
 use App\Models\Seat;
 use App\Models\SeatType;
 use App\Models\Theater;
@@ -15,7 +18,9 @@ use Database\Seeders\MasterDataSeeder;
 use Database\Seeders\MovieSeeder;
 use Database\Seeders\SeedConfig;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 /**
  * 館・シアター・座席のみを対象とするテスト用に、上映作品・上映編成・上映回を
@@ -35,6 +40,36 @@ test('seeding creates the fixed master data', function () {
     expect(Format::count())->toBe(count(SeedConfig::FORMATS));
     expect(SeatType::count())->toBe(count(SeedConfig::SEAT_TYPES));
     expect(TicketType::count())->toBe(count(SeedConfig::TICKET_TYPES));
+});
+
+test('seeding creates the post categories and a single super-admin account', function () {
+    Artisan::call('db:seed', ['--class' => MasterDataSeeder::class, '--force' => true]);
+
+    expect(PostCategory::count())->toBe(count(SeedConfig::POST_CATEGORIES));
+    expect(Admin::count())->toBe(1);
+
+    $admin = Admin::where('login_id', SeedConfig::SUPER_ADMIN_LOGIN_ID)->firstOrFail();
+    expect($admin->role)->toBe(AdminRole::SuperAdmin);
+    expect($admin->cinema_id)->toBeNull();
+});
+
+test('the super-admin password comes from the configured value when present', function () {
+    Config::set('services.seed.super_admin_password', 'a-known-dev-password');
+
+    Artisan::call('db:seed', ['--class' => MasterDataSeeder::class, '--force' => true]);
+
+    $admin = Admin::where('login_id', SeedConfig::SUPER_ADMIN_LOGIN_ID)->firstOrFail();
+    expect(Hash::check('a-known-dev-password', $admin->password))->toBeTrue();
+});
+
+test('the super-admin password is randomly generated when the configured value is blank', function () {
+    Config::set('services.seed.super_admin_password', '');
+
+    Artisan::call('db:seed', ['--class' => MasterDataSeeder::class, '--force' => true]);
+
+    $admin = Admin::where('login_id', SeedConfig::SUPER_ADMIN_LOGIN_ID)->firstOrFail();
+    expect(Hash::check('', $admin->password))->toBeFalse();
+    expect(Artisan::output())->toContain('ランダム生成しました');
 });
 
 test('seeding creates 7 cinemas with the fixed theater counts per cinema', function () {
@@ -140,10 +175,14 @@ test('running the full seeder twice does not duplicate any data', function () {
         Seat::count(),
         User::count(),
         Movie::count(),
+        Admin::count(),
+        PostCategory::count(),
         DB::table('m_theater_format')->count(),
         DB::table('m_movie_format')->count(),
         DB::table('t_bookings')->count(),
         DB::table('t_screenings')->count(),
+        DB::table('c_posts')->count(),
+        DB::table('c_banners')->count(),
     ];
 
     Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
@@ -157,9 +196,13 @@ test('running the full seeder twice does not duplicate any data', function () {
         Seat::count(),
         User::count(),
         Movie::count(),
+        Admin::count(),
+        PostCategory::count(),
         DB::table('m_theater_format')->count(),
         DB::table('m_movie_format')->count(),
         DB::table('t_bookings')->count(),
         DB::table('t_screenings')->count(),
+        DB::table('c_posts')->count(),
+        DB::table('c_banners')->count(),
     ])->toBe($counts);
 })->group('slow');
