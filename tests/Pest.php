@@ -62,13 +62,14 @@ expect()->extend('toBeOne', function () {
 */
 
 /**
- * テスト用の館とシアターを1件作成する。
+ * テスト用の館を1件作成する。
+ * slug を省略した場合は 4.1.3-6 の形式（半角英小文字とハイフンのみ）で採番する。
  */
-function createTheater(): Theater
+function createCinema(?string $slug = null, string $name = 'テスト館'): Cinema
 {
-    $cinema = Cinema::create([
-        'slug' => 'test-cinema-'.Str::random(8),
-        'name' => 'テスト館',
+    return Cinema::create([
+        'slug' => $slug ?? 'test-cinema-'.Str::lower(Str::password(8, letters: true, numbers: false, symbols: false)),
+        'name' => $name,
         'concept' => 'テスト用の館',
         'address' => '京都府京都市',
         'phone' => '123-4567-8900',
@@ -77,6 +78,14 @@ function createTheater(): Theater
         'access_note' => 'テスト',
         'map_embed_url' => 'https://example.com/map',
     ]);
+}
+
+/**
+ * テスト用の館とシアターを1件作成する。
+ */
+function createTheater(): Theater
+{
+    $cinema = createCinema();
 
     return Theater::create([
         'cinema_id' => $cinema->id,
