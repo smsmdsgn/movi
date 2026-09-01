@@ -344,13 +344,16 @@ class SeedConfig
      */
     public const array RESERVATION_GROUP_SIZES = [1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 6, 7, 8];
 
+    /** 券種マスタ（TICKET_TYPES）の「大人」の名称。位置（インデックス）ではなく名称で参照するための定数。 */
+    public const string TICKET_TYPE_ADULT = '大人';
+
     /**
      * 券種の選択比率（%、合計100。TICKET_TYPES の名称をキーとする）。
      *
      * @var array<string, int>
      */
     public const array TICKET_TYPE_WEIGHTS = [
-        '大人' => 50,
+        self::TICKET_TYPE_ADULT => 50,
         '学生' => 15,
         '高校生以下' => 15,
         'シニア' => 15,
@@ -374,10 +377,25 @@ class SeedConfig
     public const int RESERVATION_CHECKIN_WINDOW_MINUTES = 15;
 
     /**
-     * 1会員が未交換のまま保持できるスタンプ数の上限（4.5.1-2「5個で無料鑑賞券1枚を
-     * 発行しリセット」を再現しないため、5個へ到達する前で頭打ちにする。9.3追記表参照）。
+     * 無料鑑賞券1枚への交換に必要なスタンプ数（4.5.1-2）。`GionReservationSeeder` が
+     * 実際に5個での交換を再現する際に使う。`RESERVATION_STAMP_CAP` の算出元でもある。
      */
-    public const int RESERVATION_STAMP_CAP = 4;
+    public const int STAMPS_PER_FREE_TICKET = 5;
+
+    /**
+     * `ReservationSeeder`（他6館）において、1会員が未交換のまま保持できるスタンプ数の
+     * 上限。4.5.1-2「5個で無料鑑賞券1枚を発行しリセット」をそのままシーダーで
+     * 再現すると無料鑑賞券の発行・使用まで実装する必要が生じるため
+     * （実際の交換は`GionReservationSeeder`側で再現する。9.3追記表参照）、
+     * `STAMPS_PER_FREE_TICKET`（5個）に到達する前で頭打ちにする。
+     */
+    public const int RESERVATION_STAMP_CAP = self::STAMPS_PER_FREE_TICKET - 1;
+
+    /**
+     * 開発時にログインする既定アカウント（スターターキット標準）。
+     * `DatabaseSeeder` と `GionReservationSeeder` の双方が参照する。
+     */
+    public const string TEST_MEMBER_EMAIL = 'test@example.com';
 
     /**
      * 非会員の氏名・フリガナのプール（架空の人物名。9.2 / 4.3.6）。

@@ -17,10 +17,10 @@ class DatabaseSeeder extends Seeder
     {
         // ReservationSeeder が会員プールとして参照するため、MemberSeeder より前に作成する
         // （そうしないと test@example.com に予約・スタンプが一切紐づかない）。
-        if (! User::where('email', 'test@example.com')->exists()) {
+        if (! User::where('email', SeedConfig::TEST_MEMBER_EMAIL)->exists()) {
             User::factory()->create([
                 'name' => 'Test User',
-                'email' => 'test@example.com',
+                'email' => SeedConfig::TEST_MEMBER_EMAIL,
             ]);
         }
 
@@ -32,6 +32,7 @@ class DatabaseSeeder extends Seeder
             ScreeningSeeder::class,
             MemberSeeder::class,
             ReservationSeeder::class,
+            GionReservationSeeder::class,
             PostSeeder::class,
             BannerSeeder::class,
         ]);

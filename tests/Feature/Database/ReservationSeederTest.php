@@ -2,17 +2,10 @@
 
 use App\Enums\ContactType;
 use App\Enums\ReservationStatus;
-use App\Models\Booking;
 use App\Models\Cinema;
-use App\Models\Format;
-use App\Models\Movie;
 use App\Models\Reservation;
 use App\Models\ReservationSeat;
-use App\Models\Screening;
-use App\Models\Seat;
-use App\Models\SeatType;
 use App\Models\Stamp;
-use App\Models\Theater;
 use App\Models\TicketType;
 use Carbon\CarbonImmutable;
 use Database\Seeders\GionSeeder;
@@ -30,68 +23,6 @@ use Illuminate\Support\Facades\Artisan;
 beforeEach(function () {
     Artisan::call('db:seed', ['--class' => MasterDataSeeder::class, '--force' => true]);
 });
-
-/**
- * 指定した追加料金の座席種別で座席を $count 席作成する（同一シアター内）。
- */
-function makeSeatsWithSurcharge(Theater $theater, int $count, int $surcharge): SeatType
-{
-    $seatType = SeatType::create([
-        'name' => "テスト種別-{$theater->id}-{$surcharge}",
-        'surcharge' => $surcharge,
-        'display_class' => 'standard',
-    ]);
-
-    foreach (range(1, $count) as $i) {
-        Seat::create([
-            'theater_id' => $theater->id,
-            'seat_type_id' => $seatType->id,
-            'row_label' => 'ZZ',
-            'seat_number' => str_pad((string) $i, 3, '0', STR_PAD_LEFT),
-            'grid_row' => 999,
-            'grid_col' => $i,
-        ]);
-    }
-
-    return $seatType;
-}
-
-/**
- * 1つの上映編成（追加料金 $bookingSurcharge）のもとに、$startTimes の数だけ上映回を作成する。
- *
- * @param  array<int, CarbonImmutable>  $startTimes
- * @return array<int, Screening>
- */
-function makeScreenings(Theater $theater, array $startTimes, int $bookingSurcharge = 0): array
-{
-    $format = Format::firstOrCreate(['name' => '2D'], ['default_surcharge' => 0]);
-
-    $movie = Movie::create([
-        'tmdb_id' => random_int(1, 999_999_999),
-        'title' => 'テスト作品',
-        'synopsis' => 'テスト用のあらすじ',
-        'runtime_minutes' => 100,
-        'released_on' => now()->subYears(2),
-    ]);
-
-    $booking = Booking::create([
-        'cinema_id' => $theater->cinema_id,
-        'movie_id' => $movie->id,
-        'format_id' => $format->id,
-        'starts_on' => now()->subYears(2),
-        'ends_on' => now()->addWeek(),
-        'surcharge' => $bookingSurcharge,
-    ]);
-
-    return collect($startTimes)
-        ->map(fn (CarbonImmutable $startsAt) => Screening::create([
-            'booking_id' => $booking->id,
-            'theater_id' => $theater->id,
-            'starts_at' => $startsAt,
-            'ends_at' => $startsAt->addHours(2),
-        ]))
-        ->all();
-}
 
 test('no seat is reserved more than once for the same screening, and every reservation has at most 8 seats', function () {
     $theater = createTheater();

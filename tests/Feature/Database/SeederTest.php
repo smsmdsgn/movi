@@ -182,6 +182,12 @@ test('running the full seeder twice does not duplicate any data', function () {
             Reservation::whereHas('user', fn ($q) => $q->where('email', 'test@example.com'))->exists()
         )->toBeTrue();
 
+        // 祇園ムビの予約データ（動作確認用に手動投入。9.1 / GionReservationSeeder）が
+        // 実際に投入されていることの確認
+        expect(
+            Reservation::whereHas('screening.theater.cinema', fn ($q) => $q->where('slug', SeedConfig::GION_SLUG))->exists()
+        )->toBeTrue();
+
         $counts = [
             Cinema::count(),
             Theater::count(),
@@ -200,6 +206,7 @@ test('running the full seeder twice does not duplicate any data', function () {
             DB::table('t_reservations')->count(),
             DB::table('t_reservation_seats')->count(),
             DB::table('t_stamps')->count(),
+            DB::table('t_free_tickets')->count(),
             DB::table('c_posts')->count(),
             DB::table('c_banners')->count(),
         ];
@@ -224,6 +231,7 @@ test('running the full seeder twice does not duplicate any data', function () {
             DB::table('t_reservations')->count(),
             DB::table('t_reservation_seats')->count(),
             DB::table('t_stamps')->count(),
+            DB::table('t_free_tickets')->count(),
             DB::table('c_posts')->count(),
             DB::table('c_banners')->count(),
         ])->toBe($counts);
