@@ -6,11 +6,13 @@ use App\Models\Cinema;
 use App\Models\Format;
 use App\Models\Movie;
 use App\Models\PostCategory;
+use App\Models\Reservation;
 use App\Models\Seat;
 use App\Models\SeatType;
 use App\Models\Theater;
 use App\Models\TicketType;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\GeneratedCinemaSeeder;
 use Database\Seeders\GionSeeder;
@@ -165,44 +167,67 @@ test('seeding creates the fixed movie pool with format associations', function (
 });
 
 test('running the full seeder twice does not duplicate any data', function () {
-    Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
-    $counts = [
-        Cinema::count(),
-        Theater::count(),
-        Format::count(),
-        SeatType::count(),
-        TicketType::count(),
-        Seat::count(),
-        User::count(),
-        Movie::count(),
-        Admin::count(),
-        PostCategory::count(),
-        DB::table('m_theater_format')->count(),
-        DB::table('m_movie_format')->count(),
-        DB::table('t_bookings')->count(),
-        DB::table('t_screenings')->count(),
-        DB::table('c_posts')->count(),
-        DB::table('c_banners')->count(),
-    ];
+    // ReservationSeeder は4.3.1の販売期間（実行時刻から3日先まで）を基準に対象の
+    // 上映回を絞り込むため、2回の実行の間に実時間が経過すると、新たに販売期間へ
+    // 入った上映回の分だけ予約が増分してしまい、時刻を固定しないと本テストの
+    // 「完全に同一件数」という前提が崩れる。時刻を固定して実時間の経過を無効化する
+    CarbonImmutable::setTestNow(CarbonImmutable::now());
 
-    Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
+    try {
+        Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
 
-    expect([
-        Cinema::count(),
-        Theater::count(),
-        Format::count(),
-        SeatType::count(),
-        TicketType::count(),
-        Seat::count(),
-        User::count(),
-        Movie::count(),
-        Admin::count(),
-        PostCategory::count(),
-        DB::table('m_theater_format')->count(),
-        DB::table('m_movie_format')->count(),
-        DB::table('t_bookings')->count(),
-        DB::table('t_screenings')->count(),
-        DB::table('c_posts')->count(),
-        DB::table('c_banners')->count(),
-    ])->toBe($counts);
+        // test@example.com が MemberSeeder より前に作成され、会員プールに含まれることの確認
+        // （9.3追記表。順序を誤ると test@example.com に予約・スタンプが一切紐づかなくなる）
+        expect(
+            Reservation::whereHas('user', fn ($q) => $q->where('email', 'test@example.com'))->exists()
+        )->toBeTrue();
+
+        $counts = [
+            Cinema::count(),
+            Theater::count(),
+            Format::count(),
+            SeatType::count(),
+            TicketType::count(),
+            Seat::count(),
+            User::count(),
+            Movie::count(),
+            Admin::count(),
+            PostCategory::count(),
+            DB::table('m_theater_format')->count(),
+            DB::table('m_movie_format')->count(),
+            DB::table('t_bookings')->count(),
+            DB::table('t_screenings')->count(),
+            DB::table('t_reservations')->count(),
+            DB::table('t_reservation_seats')->count(),
+            DB::table('t_stamps')->count(),
+            DB::table('c_posts')->count(),
+            DB::table('c_banners')->count(),
+        ];
+
+        Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
+
+        expect([
+            Cinema::count(),
+            Theater::count(),
+            Format::count(),
+            SeatType::count(),
+            TicketType::count(),
+            Seat::count(),
+            User::count(),
+            Movie::count(),
+            Admin::count(),
+            PostCategory::count(),
+            DB::table('m_theater_format')->count(),
+            DB::table('m_movie_format')->count(),
+            DB::table('t_bookings')->count(),
+            DB::table('t_screenings')->count(),
+            DB::table('t_reservations')->count(),
+            DB::table('t_reservation_seats')->count(),
+            DB::table('t_stamps')->count(),
+            DB::table('c_posts')->count(),
+            DB::table('c_banners')->count(),
+        ])->toBe($counts);
+    } finally {
+        CarbonImmutable::setTestNow();
+    }
 })->group('slow');

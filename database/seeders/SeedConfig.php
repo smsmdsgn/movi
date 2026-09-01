@@ -321,4 +321,79 @@ class SeedConfig
         BannerPosition::Sub->value => 2,
         BannerPosition::FooterLink->value => 4,
     ];
+
+    /** 会員数（docs/design.md 9.2）。 */
+    public const int MEMBER_COUNT = 200;
+
+    /** 予約のうち会員が占める割合（%）。残りは非会員とする（9.2）。 */
+    public const int MEMBER_RESERVATION_PERCENT = 60;
+
+    /** 上映回ごとの座席稼働率の範囲（%、9.2）。 */
+    public const int RESERVATION_MIN_OCCUPANCY_PERCENT = 5;
+
+    public const int RESERVATION_MAX_OCCUPANCY_PERCENT = 80;
+
+    /** 過去の予約のうち入場済み（`checked_in_at` 設定済み）とする割合（%、9.2）。 */
+    public const int RESERVATION_CHECKED_IN_PERCENT = 80;
+
+    /**
+     * 1予約あたりの座席数の分布（4.3.4「1予約あたりの座席数は最大8席」の範囲内で
+     * 小人数の予約を多めに出現させるための重み付き候補リスト）。
+     *
+     * @var array<int, int>
+     */
+    public const array RESERVATION_GROUP_SIZES = [1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 6, 7, 8];
+
+    /**
+     * 券種の選択比率（%、合計100。TICKET_TYPES の名称をキーとする）。
+     *
+     * @var array<string, int>
+     */
+    public const array TICKET_TYPE_WEIGHTS = [
+        '大人' => 50,
+        '学生' => 15,
+        '高校生以下' => 15,
+        'シニア' => 15,
+        '障がい者手帳をお持ちの方' => 5,
+    ];
+
+    /**
+     * 予約データの生成対象とする過去日数（9.2は上映編成・上映回と「同上」の期間を
+     * 定めるが、過去2年〜未来2週間の全上映回に予約を生成すると数百万行規模となり
+     * 現実的でないため、直近のみに縮小する（9.3追記表参照）。
+     */
+    public const int RESERVATION_PAST_DAYS = 14;
+
+    /**
+     * 予約データの生成対象とする未来日数（4.3.1「販売期間は上映日の3日前0:00から」。
+     * これを超える未来の上映回は販売開始前のため予約を生成しない）。
+     */
+    public const int RESERVATION_SALE_WINDOW_DAYS = 3;
+
+    /** 入場済み（`checked_in_at`）とする場合の、上映開始からの経過分の上限（1分〜この値の範囲でランダム）。 */
+    public const int RESERVATION_CHECKIN_WINDOW_MINUTES = 15;
+
+    /**
+     * 1会員が未交換のまま保持できるスタンプ数の上限（4.5.1-2「5個で無料鑑賞券1枚を
+     * 発行しリセット」を再現しないため、5個へ到達する前で頭打ちにする。9.3追記表参照）。
+     */
+    public const int RESERVATION_STAMP_CAP = 4;
+
+    /**
+     * 非会員の氏名・フリガナのプール（架空の人物名。9.2 / 4.3.6）。
+     *
+     * @var array<int, array{name: string, kana: string}>
+     */
+    public const array GUEST_NAMES = [
+        ['name' => '田中一郎', 'kana' => 'タナカイチロウ'],
+        ['name' => '佐藤花子', 'kana' => 'サトウハナコ'],
+        ['name' => '鈴木太郎', 'kana' => 'スズキタロウ'],
+        ['name' => '高橋陽子', 'kana' => 'タカハシヨウコ'],
+        ['name' => '伊藤健太', 'kana' => 'イトウケンタ'],
+        ['name' => '渡辺美咲', 'kana' => 'ワタナベミサキ'],
+        ['name' => '山本大輔', 'kana' => 'ヤマモトダイスケ'],
+        ['name' => '中村麻衣', 'kana' => 'ナカムラマイ'],
+        ['name' => '小林直樹', 'kana' => 'コバヤシナオキ'],
+        ['name' => '加藤恵', 'kana' => 'カトウメグミ'],
+    ];
 }

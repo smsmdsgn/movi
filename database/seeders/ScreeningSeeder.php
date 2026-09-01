@@ -8,6 +8,7 @@ use App\Models\Movie;
 use App\Models\Screening;
 use App\Models\Theater;
 use Carbon\CarbonImmutable;
+use Database\Seeders\Concerns\DeterministicRandom;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,8 @@ use Illuminate\Support\Facades\DB;
  */
 class ScreeningSeeder extends Seeder
 {
+    use DeterministicRandom;
+
     public function run(): void
     {
         $start = CarbonImmutable::now()->subYears(SeedConfig::GENERATION_PAST_YEARS)->startOfDay();
@@ -134,19 +137,6 @@ class ScreeningSeeder extends Seeder
         $index = $this->deterministicIndex("{$theaterId}-{$slot}", $pool->count());
 
         return $pool[$index];
-    }
-
-    /**
-     * 文字列から 0〜99 の決定的な値を求める（crc32は32bit環境で負値になりうるため & でマスクする）。
-     */
-    private function deterministicRatio(string $seed): int
-    {
-        return (crc32($seed) & 0x7FFFFFFF) % 100;
-    }
-
-    private function deterministicIndex(string $seed, int $count): int
-    {
-        return (crc32($seed) & 0x7FFFFFFF) % $count;
     }
 
     /**
