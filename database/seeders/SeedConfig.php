@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Enums\BannerPosition;
+use App\Models\Cinema;
 
 /**
  * シーダーの生成規模・固定構成を定数として集約する（docs/design.md 6.3.3 / 9章、13章）。
@@ -39,8 +40,9 @@ class SeedConfig
 
     /**
      * 祇園ムビ（本館、手動データ。docs/design.md 4.1.1 / 9.1）の基本情報。
+     * slug は `Cinema::DEFAULT_SLUG`（4.1.3-2 の既定値）と一致させる。
      */
-    public const string GION_SLUG = 'gion';
+    public const string GION_SLUG = Cinema::DEFAULT_SLUG;
 
     public const string GION_NAME = '祇園ムビ';
 

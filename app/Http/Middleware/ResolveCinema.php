@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\Cinema;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cookie;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -14,6 +15,9 @@ use Symfony\Component\HttpFoundation\Response;
  * 本ミドルウェアを通らない文脈（Livewire の更新エンドポイント、Job、コマンド）では
  * バインドが存在せず `app(Cinema::class)` が空のモデルを返すため、
  * それらへは館を引数で引き渡す（4.1.3 実装で確定した事項）。
+ *
+ * 解決した館はセッションと1年有効の Cookie にも保持し（4.1.3-1）、
+ * 館非依存ページ（`CurrentCinemaService`）が再訪時に復元できるようにする。
  */
 class ResolveCinema
 {
@@ -28,6 +32,9 @@ class ResolveCinema
         abort_unless(is_string($slug), 404);
 
         app()->instance(Cinema::class, Cinema::where('slug', $slug)->firstOrFail());
+
+        $request->session()->put(Cinema::SESSION_KEY, $slug);
+        Cookie::queue(Cinema::SESSION_KEY, $slug, 60 * 24 * 365);
 
         return $next($request);
     }

@@ -24,6 +24,17 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['slug', 'name', 'concept', 'address', 'phone', 'business_hours', 'facility_info', 'access_note', 'map_embed_url'])]
 class Cinema extends Model
 {
+    /**
+     * 館が未選択の場合の既定値（4.1.3-2）。祇園ムビ（本館、4.1.1）の slug。
+     */
+    public const string DEFAULT_SLUG = 'gion';
+
+    /**
+     * 選択中の館の slug を保持するセッション・Cookie のキー（4.1.3-1）。
+     * `ResolveCinema` と `App\Services\CurrentCinemaService` の双方が参照する。
+     */
+    public const string SESSION_KEY = 'cinema_slug';
+
     protected $table = 'm_cinemas';
 
     /**

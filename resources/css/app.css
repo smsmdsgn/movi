@@ -26,6 +26,9 @@
     --color-accent: var(--color-neutral-800);
     --color-accent-content: var(--color-neutral-800);
     --color-accent-foreground: var(--color-white);
+
+    /* 顧客向け共通レイアウトのアソート色（18.2）。ヘッダー・フッター・セクション見出しの背景に使う。 */
+    --color-brand: #2b1d14;
 }
 
 @layer theme {

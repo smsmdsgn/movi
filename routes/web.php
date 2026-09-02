@@ -1,12 +1,53 @@
 <?php
 
+use App\Http\Controllers\Front\ChainTopController;
+use App\Http\Controllers\Front\PagePlaceholderController;
 use App\Http\Controllers\Front\PlaceholderController;
 use Illuminate\Support\Facades\Route;
 
-Route::view('/', 'welcome')->name('home');
-
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::view('dashboard', 'dashboard')->name('dashboard');
+});
+
+/*
+|--------------------------------------------------------------------------
+| 館非依存ページ（7.1.1 P-01, P-05〜P-20）
+|--------------------------------------------------------------------------
+|
+| P-01（チェーントップ）は実装済み。それ以外は工程2ではルート骨格のみを
+| 実装するため、PagePlaceholderController が画面IDと現在の館（ヘッダー表示用、
+| CurrentCinemaService で解決）のみを返す。各画面の実装（該当フェーズ、11.1）で
+| 画面ごとの内容へ差し替える。
+|
+| P-02（会員登録）・P-03（ログイン）・P-04（パスワード再設定）は対象外。
+| P-03・P-04 は Fortify が既に実ルートとして提供しており、いずれも認証画面
+| として Flux UI の対象（13.5-3）のため、本レイアウトの適用対象外
+|（design.md 4.1.3 追記表）。
+|
+| P-05・P-06（マイページ）は会員専用画面（7.14）のため `auth` を付与する。
+|
+*/
+Route::get('/', ChainTopController::class)->name('front.home');
+
+Route::name('front.')->group(function () {
+    Route::middleware('auth')->group(function () {
+        Route::get('mypage', PagePlaceholderController::class)->defaults('screenId', 'P-05')->name('mypage.index');
+        Route::get('mypage/reservations/{id}', PagePlaceholderController::class)->defaults('screenId', 'P-06')->name('mypage.reservation.show')->whereNumber('id');
+    });
+    Route::get('lookup', PagePlaceholderController::class)->defaults('screenId', 'P-07')->name('lookup.index');
+    Route::get('prices', PagePlaceholderController::class)->defaults('screenId', 'P-08')->name('prices.index');
+    Route::get('food', PagePlaceholderController::class)->defaults('screenId', 'P-09')->name('food.index');
+    Route::get('presale', PagePlaceholderController::class)->defaults('screenId', 'P-10')->name('presale.index');
+    Route::get('faq', PagePlaceholderController::class)->defaults('screenId', 'P-11')->name('faq.index');
+    Route::get('recruit', PagePlaceholderController::class)->defaults('screenId', 'P-12')->name('recruit.index');
+    Route::get('company', PagePlaceholderController::class)->defaults('screenId', 'P-13')->name('company.index');
+    Route::get('contact', PagePlaceholderController::class)->defaults('screenId', 'P-14')->name('contact.index');
+    Route::get('contact/complete', PagePlaceholderController::class)->defaults('screenId', 'P-15')->name('contact.complete');
+    Route::get('terms', PagePlaceholderController::class)->defaults('screenId', 'P-16')->name('terms.index');
+    Route::get('privacy', PagePlaceholderController::class)->defaults('screenId', 'P-17')->name('privacy.index');
+    Route::get('cookie-policy', PagePlaceholderController::class)->defaults('screenId', 'P-18')->name('cookie-policy.index');
+    Route::get('legal', PagePlaceholderController::class)->defaults('screenId', 'P-19')->name('legal.index');
+    Route::get('sitemap', PagePlaceholderController::class)->defaults('screenId', 'P-20')->name('sitemap.index');
 });
 
 /*

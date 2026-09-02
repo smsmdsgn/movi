@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Cinema;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use LogicException;
 
 /**
  * 工程2（館切替とルーティング）の検証用に、館の解決結果のみを返す暫定コントローラ。
@@ -23,8 +24,10 @@ class PlaceholderController extends Controller
     {
         $screenId = $request->route('screenId');
 
-        /** defaults() の付け忘れが空の画面IDで 200 を返さないようにする。 */
-        abort_unless(is_string($screenId) && $screenId !== '', 500);
+        /** defaults() の付け忘れを検出する。実装者のミスであり、利用者に起因する 500 ではない。 */
+        if (! is_string($screenId) || $screenId === '') {
+            throw new LogicException('defaults(\'screenId\', ...) が設定されていません。');
+        }
 
         return view('front.placeholder', [
             'cinema' => $cinema,

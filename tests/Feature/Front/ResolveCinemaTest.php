@@ -26,9 +26,13 @@ it('routes/ で定義したルートのアクションにクロージャを使�
 it('館別ページで {slug} の館を解決し、画面IDに対応するページを返す', function (string $routeName, string $screenId, array $parameters) {
     createCinema('gion', '祇園ムビ');
 
+    /*
+     * ヘッダーの劇場切替セレクトボックスにも館名が候補として出るため、
+     * 解決された館を表す data-testid="cinema-name" の内容で判定する。
+     */
     $this->get(route($routeName, ['slug' => 'gion', ...$parameters]))
         ->assertOk()
-        ->assertSee('祇園ムビ')
+        ->assertSee('data-testid="cinema-name">祇園ムビ<', false)
         ->assertSee($screenId);
 })->with([
     'P-21 館トップ' => ['front.cinema.show', 'P-21', []],
@@ -64,10 +68,15 @@ it('slug ごとに異なる館を解決する', function () {
     createCinema('gion', '祇園ムビ');
     createCinema('kyoto', 'ムビ京都');
 
+    /*
+     * ヘッダーの劇場切替セレクトボックス（本タスクで追加）に他館の名称が
+     * 選択肢として表示されるため、ページ全体に「祇園ムビ」が無いことは検証できない。
+     * 解決された館を表す data-testid="cinema-name" の内容で判定する。
+     */
     $this->get(route('front.cinema.show', ['slug' => 'kyoto']))
         ->assertOk()
-        ->assertSee('ムビ京都')
-        ->assertDontSee('祇園ムビ');
+        ->assertSee('data-testid="cinema-name">ムビ京都<', false)
+        ->assertDontSee('data-testid="cinema-name">祇園ムビ<', false);
 });
 
 it('解決した館をコンテナ経由でコントローラへ引き渡す', function () {
