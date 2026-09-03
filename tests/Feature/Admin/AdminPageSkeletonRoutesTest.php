@@ -9,7 +9,6 @@ it('管理画面（4.8.5 A-05〜A-16）のルートが認証済み管理者に�
         ->assertSee($screenId);
 })->with([
     'A-05 映画マスタ' => ['admin.movie.index', 'A-05'],
-    'A-06 上映規格マスタ' => ['admin.format.index', 'A-06'],
     'A-07 券種・料金マスタ' => ['admin.ticket-type.index', 'A-07'],
     'A-08 上映編成' => ['admin.booking.index', 'A-08'],
     'A-09 上映回' => ['admin.screening.index', 'A-09'],
@@ -29,7 +28,6 @@ it('cinema-admin はバナー・管理者アカウント管理を除く全画面
         ->assertSee($screenId);
 })->with([
     'A-05 映画マスタ' => ['admin.movie.index', 'A-05'],
-    'A-06 上映規格マスタ' => ['admin.format.index', 'A-06'],
     'A-07 券種・料金マスタ' => ['admin.ticket-type.index', 'A-07'],
     'A-08 上映編成' => ['admin.booking.index', 'A-08'],
     'A-09 上映回' => ['admin.screening.index', 'A-09'],
@@ -61,6 +59,7 @@ it('未ログインで管理画面配下にアクセスすると admin.login へ
     'A-02 ダッシュボード' => ['admin.dashboard'],
     'A-03 館マスタ' => ['admin.cinema.index'],
     'A-04 シアター・座席' => ['admin.theater.index'],
+    'A-06 上映規格マスタ' => ['admin.format.index'],
 ]);
 
 it('gate ロールは入場ゲート以外の管理画面へ到達できない（T-12 / 17.1.3）', function (string $routeName) {
@@ -71,6 +70,7 @@ it('gate ロールは入場ゲート以外の管理画面へ到達できない�
     'A-02 ダッシュボード' => ['admin.dashboard'],
     'A-03 館マスタ' => ['admin.cinema.index'],
     'A-04 シアター・座席' => ['admin.theater.index'],
+    'A-06 上映規格マスタ' => ['admin.format.index'],
     'A-13 バナー' => ['admin.banner.index'],
 ]);
 
