@@ -3,6 +3,7 @@
 use App\Enums\AdminRole;
 use App\Enums\ContactType;
 use App\Enums\ReservationStatus;
+use App\Enums\SeatDisplayClass;
 use App\Models\Admin;
 use App\Models\Booking;
 use App\Models\Cinema;
@@ -145,7 +146,7 @@ function createScreeningWithSeat(): array
     $seatType = SeatType::create([
         'name' => '一般',
         'surcharge' => 0,
-        'display_class' => 'standard',
+        'display_class' => SeatDisplayClass::Standard,
     ]);
 
     $seat = Seat::create([
@@ -280,7 +281,7 @@ function makeSeatsWithSurcharge(Theater $theater, int $count, int $surcharge): S
     $seatType = SeatType::create([
         'name' => "テスト種別-{$theater->id}-{$surcharge}",
         'surcharge' => $surcharge,
-        'display_class' => 'standard',
+        'display_class' => SeatDisplayClass::Standard,
     ]);
 
     foreach (range(1, $count) as $i) {

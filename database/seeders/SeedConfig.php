@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Enums\BannerPosition;
+use App\Enums\SeatDisplayClass;
 use App\Models\Cinema;
 
 /**
@@ -157,12 +158,12 @@ class SeedConfig
     /**
      * 座席種別マスタ（docs/design.md 6.3.2）。
      *
-     * @var array<string, array{surcharge: int, display_class: string}>
+     * @var array<string, array{surcharge: int, display_class: SeatDisplayClass}>
      */
     public const array SEAT_TYPES = [
-        self::SEAT_TYPE_GENERAL => ['surcharge' => 0, 'display_class' => 'standard'],
-        self::SEAT_TYPE_WHEELCHAIR => ['surcharge' => 0, 'display_class' => 'wheelchair'],
-        self::SEAT_TYPE_EXECUTIVE => ['surcharge' => 1000, 'display_class' => 'executive'],
+        self::SEAT_TYPE_GENERAL => ['surcharge' => 0, 'display_class' => SeatDisplayClass::Standard],
+        self::SEAT_TYPE_WHEELCHAIR => ['surcharge' => 0, 'display_class' => SeatDisplayClass::Wheelchair],
+        self::SEAT_TYPE_EXECUTIVE => ['surcharge' => 1000, 'display_class' => SeatDisplayClass::Executive],
     ];
 
     /**
