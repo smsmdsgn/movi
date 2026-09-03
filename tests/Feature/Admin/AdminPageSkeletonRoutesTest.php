@@ -2,13 +2,12 @@
 
 use App\Enums\AdminRole;
 
-it('管理画面（4.8.5 A-03〜A-16）のルートが認証済み管理者に画面IDを返す', function (string $routeName, string $screenId) {
+it('管理画面（4.8.5 A-04〜A-16）のルートが認証済み管理者に画面IDを返す', function (string $routeName, string $screenId) {
     $this->actingAs(createAdmin(), 'admin')
         ->get(route($routeName))
         ->assertOk()
         ->assertSee($screenId);
 })->with([
-    'A-03 館マスタ' => ['admin.cinema.index', 'A-03'],
     'A-04 シアター・座席管理' => ['admin.theater.index', 'A-04'],
     'A-05 映画マスタ' => ['admin.movie.index', 'A-05'],
     'A-06 上映規格マスタ' => ['admin.format.index', 'A-06'],
@@ -30,7 +29,6 @@ it('cinema-admin はバナー・管理者アカウント管理を除く全画面
         ->assertOk()
         ->assertSee($screenId);
 })->with([
-    'A-03 館マスタ' => ['admin.cinema.index', 'A-03'],
     'A-04 シアター・座席管理' => ['admin.theater.index', 'A-04'],
     'A-05 映画マスタ' => ['admin.movie.index', 'A-05'],
     'A-06 上映規格マスタ' => ['admin.format.index', 'A-06'],

@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\LogoutController;
 use App\Http\Controllers\Admin\PagePlaceholderController;
 use App\Http\Middleware\AuthorizeAdminScreen;
 use App\Livewire\Admin\Auth\Login;
+use App\Livewire\Admin\Cinemas\Index as CinemaIndex;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -12,8 +13,8 @@ use Illuminate\Support\Facades\Route;
 | 管理画面（4.8.5 A-01〜A-16）
 |--------------------------------------------------------------------------
 |
-| A-01（ログイン）のみ実装。A-02（ダッシュボード）は最低限の実装、
-| A-03〜A-16 は工程3-aではルート骨格のみで、PagePlaceholderController が
+| A-01（ログイン）・A-03（館マスタ）を実装。A-02（ダッシュボード）は最低限の実装、
+| A-04〜A-16 は工程3-aではルート骨格のみで、PagePlaceholderController が
 | 画面IDのみを返す（12章 残課題）。各画面の実装（該当フェーズ、11.1）で
 | 画面ごとの内容へ差し替える。
 |
@@ -27,7 +28,7 @@ Route::prefix('admin')->group(function (): void {
 
     Route::middleware(['auth:admin', AuthorizeAdminScreen::class])->name('admin.')->group(function (): void {
         Route::get('/', DashboardController::class)->name('dashboard');
-        Route::get('cinemas', PagePlaceholderController::class)->defaults('screenId', 'A-03')->name('cinema.index');
+        Route::get('cinemas', CinemaIndex::class)->name('cinema.index');
         Route::get('theaters', PagePlaceholderController::class)->defaults('screenId', 'A-04')->name('theater.index');
         Route::get('movies', PagePlaceholderController::class)->defaults('screenId', 'A-05')->name('movie.index');
         Route::get('formats', PagePlaceholderController::class)->defaults('screenId', 'A-06')->name('format.index');

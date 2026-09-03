@@ -3,6 +3,7 @@
 use App\Http\Controllers\Front\ChainTopController;
 use App\Http\Controllers\Front\PagePlaceholderController;
 use App\Http\Controllers\Front\PlaceholderController;
+use App\Models\Cinema;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -65,7 +66,7 @@ Route::name('front.')->group(function () {
 |
 */
 Route::prefix('cinemas/{slug}')
-    ->where(['slug' => '[a-z]+(?:-[a-z]+)*'])
+    ->where(['slug' => Cinema::SLUG_REGEX])
     ->middleware('cinema')
     ->name('front.')
     ->group(function () {

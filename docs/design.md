@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 版数 | 8.35 |
+| 版数 | 8.36 |
 | 作成日 | 2026-08-11 |
 | 開発体制 | 1名 |
 
@@ -1004,10 +1004,19 @@ bookings （上映編成）
 | ログイン成功時・再訪問時の遷移先 | `Admin::landingRouteName()` が `view-admin-screen` Gateで到達可能な最初の画面（`admin.dashboard`→`admin.gate.index`の順）を返す。`App\Livewire\Admin\Auth\Login::login()` と `bootstrap/app.php` の `redirectUsersTo()` の双方がこれを使う | `gate`ロールはダッシュボードへ到達できないため、遷移先を`admin.dashboard`に固定するとログイン直後に403になり、`/admin/login`へ戻っても`redirectUsersTo`が同じ場所へ送り返す無限ループになる |
 | 管理者ログアウトの実装 | `Auth::guard('admin')->logout()` の後、`Session::invalidate()`（セッション全体を破棄）ではなく `$request->session()->regenerate()`（IDの再生成のみ）を呼ぶ。**既知の制約**: 顧客側のログアウト（Fortify標準）は逆に`Session::invalidate()`を使っており、admin→customer方向のみ「道連れにしない」を担保している（customer→admin方向は未対応） | `admin`ガードと`web`ガードはCookie（セッション）を共有するため、`invalidate()`だと同一ブラウザの顧客ログインも道連れで失われる。17.1.2-1の「セッションを分離する」はガード単位の分離であり、Cookie自体の分離までは求めていない |
 | 管理者ログインのレート制限のキー | ログインID+IPのキーに加え、IP単独のキー（`admin-login\|{ip}`）も5回/分でチェックする。**既知の制約**: IP単独キーは館内で同一グローバルIPを共有する複数の管理者・ゲート端末間でも共有される。1名の入力ミスが5回に達すると、同じ館の他の管理者・ゲート端末も1分間ログインできない | 17.1.2の【根拠】が「管理者は顧客より強度要件を高く設定する」としているが、ログインID+IPのキーのみでは同一IPからログインIDを変えながらの総当たりを防げない（顧客側17.1.1-3の「同一IPおよび同一メールアドレス」と同様の考え方） |
-| A-02〜A-16 の応答 | A-01（ログイン）のみ実装する。A-02（ダッシュボード）は管理者名・役割・所属館の表示と、集計項目が未実装である旨の案内のみとする。A-03〜A-16は `App\Http\Controllers\Admin\PagePlaceholderController` が画面IDのみを返す（12章 残課題） | 集計対象の上映回・予約データを扱う管理画面（マスタ管理・上映編成・上映回登録）が本タスクの後続であり、実データが無い段階では実装できないため |
+| A-02〜A-16 の応答（工程3-a時点） | A-01（ログイン）のみ実装する。A-02（ダッシュボード）は管理者名・役割・所属館の表示と、集計項目が未実装である旨の案内のみとする。A-03〜A-16は `App\Http\Controllers\Admin\PagePlaceholderController` が画面IDのみを返す（12章 残課題）。**A-03は後続タスクで実装済み**（下表「A-03（館マスタ）の実装」） | 集計対象の上映回・予約データを扱う管理画面（マスタ管理・上映編成・上映回登録）が本タスクの後続であり、実データが無い段階では実装できないため |
 | A-14（管理者アカウント）のルート名 | `admin.account.index` とする（`admin.`グループ+`admin.index`ではなく`account.index`） | `name('admin.')`グループ内で`admin.index`と命名すると`admin.admin.index`となり可読性が低い |
 | `gate` ロールが到達できる画面 | `admin.gate.index` のみ。A-15（パスワード変更）にも到達できない | 17.1.3「入場確認以外の操作を行えないようにする」を厳格に適用した。4.8.4-5がパスワード再設定を`super-admin`の役割としているため、`gate`自身によるパスワード変更を想定していない |
-| 管理画面がLivewire化された際の追加対応（将来） | `AuthorizeAdminScreen`はルート名ベースの画面到達可否のみを検証する。各画面がLivewireコンポーネント化された後、`/livewire/update`経由のアクション呼び出し（例: 一覧の絞り込み変更、削除ボタン等）に対しては、コンポーネント側で`$this->authorize()`等による個別の権限判定が別途必要になる | ミドルウェアは初回のページ読み込み（フルページロード）のみを保護し、以降のLivewireアクション呼び出しの権限までは保証しない |
+| 管理画面がLivewire化された際の追加対応（将来） | `AuthorizeAdminScreen`はルート名ベースの画面到達可否のみを検証する。各画面がLivewireコンポーネント化された後、`/livewire/update`経由のアクション呼び出し（例: 一覧の絞り込み変更、削除ボタン等）に対しては、コンポーネント側で個別の権限判定が別途必要になる。**A-03実装時に確定**: `$this->authorize()`（`AuthorizesRequests`トレイト）は使わず`Gate::forUser($admin)->authorize(...)`を使う（下表） | ミドルウェアは初回のページ読み込み（フルページロード）のみを保護し、以降のLivewireアクション呼び出しの権限までは保証しない |
+| A-03（館マスタ）の実装 | 本タスクで実装し、A-02〜A-16のうちA-03のみ`PagePlaceholderController`の対象から外した。作成・閲覧・編集を同一のモーダルで扱い、`$readOnly`で入力欄と保存操作の可否を切り替える。`cinema-admin`は一覧の各行から閲覧専用（詳細）で開き、`super-admin`は編集で開く | 4.8.2は館マスタを`cinema-admin`に「閲覧」として許可しており、一覧の4列（館名/slug/住所/営業時間）だけでは`facility_info`等を確認できない。モーダル自体を`cinema-admin`から隠すと4.8.2の閲覧要件を満たせないため、閲覧・編集を同じフォームの表示切替で扱う |
+| `Cinema`モデル自体の館スコープ | `CinemaScope`（グローバルスコープ、`cinema_id`列で絞り込む）は適用せず、`Cinema::scopeVisibleTo(Admin $admin)`（ローカルスコープ）をA-03から明示的に呼び出す。`cinema_id`が未設定の場合は`CinemaScope`と同様に403とする | `Cinema`自体が館そのものであり`cinema_id`外部キーを持たないことに加え、`CinemaScope`は`admin`ガードのセッションの有無のみで発火する（既知の制約、本表）。これをグローバルスコープとして`Cinema`に適用すると、顧客側（`ResolveCinema`のslug解決、`CurrentCinemaService`のフォールバック）が管理者と同一ブラウザで壊れる。ローカルスコープとして呼び出し元が明示的に適用する形にすることでこの波及を避けた |
+| A-03のslugバリデーションの正規表現アンカー | `/^…$/`ではなく`/\A…\z/`を用いる | PHPの`$`は既定で末尾の改行1文字の直前にもマッチするため、末尾に改行を含むslug（例:`"gion\n"`）がバリデーションを通過しうる。ルート側（Symfonyの`RouteCompiler`）は`D`修飾子相当の厳密一致のため、バリデーションを通過してもアクセス不能な館が生成される。4.1.3-6の「ルートに一致しない slug を保存できないようにする」を満たすため`\A`/`\z`に統一した |
+| `CinemaPolicy::viewAny`の追加 | 館マスタの一覧取得・詳細閲覧（`view()`）の可否を判定するアビリティを追加し、`gate`ロールを拒否する。一覧取得（`render()`）・`view()`の双方で`Gate::forUser($admin)->authorize('viewAny', Cinema::class)`を呼ぶ | `AuthorizeAdminScreen`ミドルウェアはフルページロードのみを保護し`/livewire/update`経由のアクション呼び出しには適用されない（4.8.6の本表、Livewire化時の追加対応）。ロール変更前に開いたままの`gate`ロールの管理者のスナップショットから`view()`が呼ばれても、`visibleTo`スコープ（自館への絞り込み）だけでは「そもそも閲覧してよい役割か」を判定できず館マスタ全項目が取得できてしまう |
+| `map_embed_url`のバリデーション | `https://www.google.com/`で始まるURLのみ許可する | 17.7 のCSP（`frame-src`）が埋め込み先を`https://www.google.com`のみに制限しているため、他ホストのURLを保存できても実際には埋め込めない。保存時点で弾く |
+| `m_cinemas.map_embed_url`のカラム型 | `VARCHAR(255)`から`TEXT`へ変更した（`2026_09_03_000001_change_map_embed_url_to_text_in_m_cinemas_table.php`、`Schema::table()->change()`） | Googleマップの「地図を埋め込む」から取得する`<iframe>`の`src`は400〜700文字に達することがあり、`VARCHAR(255)`ではMariaDBのstrictモードで保存時に`Data too long`となる |
+| `CinemaPolicy`への`create`/`update`追加 | 館マスタの作成・編集可否（4.8.2）を、既存の`viewAllCinemas`（全館横断参照）とは別のLaravel標準アビリティ名で追加した | 「全館横断で参照できるか」と「マスタを編集できるか」は意味が異なり、片方だけ権限を広げる変更が将来生じた際に1メソッドでは分離できない |
+| Livewireコンポーネント内の認可判定 | `$this->authorize()`は使わず、Bladeと同じ`Gate::forUser($admin)->authorize(...)`を使う | `$this->authorize()`は内部で既定ガード（`web`）の`Auth::user()`を解決するため、`admin`ガードでは常に未許可と判定される。13.4.2がBladeの`@can`について同じ理由の例外を定めており、Livewireコンポーネントのアクションにも同じ制約が及ぶ |
+| slugの正規表現の共有化 | `App\Models\Cinema::SLUG_REGEX`定数を追加し、ルート制約（routes/web.php）とA-03のバリデーションの双方から参照する | 4.1.3追記表の「同一の正規表現を用いる」が、実装時点では文字列リテラルの重複のみで担保されており、修正漏れを機械的に防げなかった |
 
 ### 4.9 F-09 静的コンテンツ
 
@@ -2326,7 +2335,7 @@ B-03 は `t_stamps.reservation_id` のユニーク制約により多重実行時
 | 9 | 実装 | `vendor/bin/phpstan analyse` が PHP 既定の `memory_limit`（128M）に達して停止する。現状は `--memory-limit=1G` を都度付けて回避している。`composer.json` の `types:check` は素の `phpstan analyse` のため、`ci:check` 経由のCIでも同じく停止する。CI/CD の構成を検討する際にあわせて解決すること | 16.2 V-02 / 16.3 |
 | 10 | 仕様 | ロゴ画像素材が未用意のため、共通レイアウトのヘッダー（7.2.1-1）は暫定的にテキストリンク（`front.header.logo_alt`）としている。素材が用意でき次第、画像に差し替えること | 7.2.1 |
 | 11 | 残課題 | 共通レイアウト（`components/front/layout.blade.php`）が `<title>` のみで、19.2 の meta description、19.3 の canonical・OGP・Twitter Card・構造化データ・パンくずリストを実装していない。各画面の実装（該当フェーズ、11.1）で併せて実装すること | 19.2 / 19.3 |
-| 12 | 残課題 | 管理画面のダッシュボード（A-02）は集計項目（7.16）を未実装（案内表示のみ）とし、A-03〜A-16 は `App\Http\Controllers\Admin\PagePlaceholderController` を暫定の応答とし `resources/views/admin/placeholder.blade.php` を共用している（4.8.6追記表）。該当フェーズ（11.1）で画面ごとの実装へ差し替え、使用箇所が無くなった時点で両者を削除すること | 4.8.6 / 7.1.1 / 11.1 |
+| 12 | 残課題 | 管理画面のダッシュボード（A-02）は集計項目（7.16）を未実装（案内表示のみ）とし、A-04〜A-16 は `App\Http\Controllers\Admin\PagePlaceholderController` を暫定の応答とし `resources/views/admin/placeholder.blade.php` を共用している（A-03は実装済み、4.8.6追記表）。該当フェーズ（11.1）で画面ごとの実装へ差し替え、使用箇所が無くなった時点で両者を削除すること | 4.8.6 / 7.1.1 / 11.1 |
 
 ---
 

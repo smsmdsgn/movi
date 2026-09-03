@@ -78,8 +78,29 @@ function createCinema(?string $slug = null, string $name = 'テスト館'): Cine
         'business_hours' => '8:00〜23:55',
         'facility_info' => 'テスト',
         'access_note' => 'テスト',
-        'map_embed_url' => 'https://example.com/map',
+        'map_embed_url' => 'https://www.google.com/maps?q=test&output=embed',
     ]);
+}
+
+/**
+ * A-03（館マスタ管理）のLivewireフォームに投入する、バリデーションを通過する
+ * 入力値一式を返す。`$overrides` で一部の項目だけ差し替えて検証できる。
+ *
+ * @return array<string, string>
+ */
+function validCinemaForm(array $overrides = []): array
+{
+    return array_merge([
+        'slug' => 'shijo-karasuma',
+        'name' => 'ムビ四条烏丸',
+        'concept' => '新しい館',
+        'address' => '京都府京都市下京区',
+        'phone' => '075-000-0000',
+        'business_hours' => '9:00〜24:00',
+        'facility_info' => '売店あり',
+        'access_note' => '駅から徒歩5分',
+        'map_embed_url' => 'https://www.google.com/maps?q=shijo-karasuma&output=embed',
+    ], $overrides);
 }
 
 /**
