@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Scopes\CinemaScope;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
@@ -21,6 +22,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Theater extends Model
 {
     protected $table = 'm_theaters';
+
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new CinemaScope);
+    }
 
     /**
      * @return BelongsTo<Cinema, $this>

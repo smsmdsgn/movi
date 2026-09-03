@@ -80,3 +80,4 @@ Route::prefix('cinemas/{slug}')
     });
 
 require __DIR__.'/settings.php';
+require __DIR__.'/admin.php';

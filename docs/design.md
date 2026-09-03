@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 版数 | 8.34 |
+| 版数 | 8.35 |
 | 作成日 | 2026-08-11 |
 | 開発体制 | 1名 |
 
@@ -988,6 +988,26 @@ bookings （上映編成）
 
 **【根拠】** メールアドレスを持たない利用者が控えを失った場合、
 窓口での照会が最終的な救済手段となる。
+
+#### 4.8.6 実装で確定した事項
+
+| 項目 | 内容 | 理由 |
+|---|---|---|
+| `admin` ガードの構成 | `config/auth.php` に `admin` guard（`session` driver）と `admins` provider（`App\Models\Admin`）を追加した。パスワードリセットの broker は追加しない | 17.1.2-5がメールを起点とする認証導線（招待・リセットリンク）を持たないと定めているため |
+| ガード別リダイレクト先 | Laravel既定の `auth`/`guest` ミドルウェアはガードに関わらず `route('login')`/`route('dashboard')` へ固定でリダイレクトする。`bootstrap/app.php` で `redirectGuestsTo()`/`redirectUsersTo()` をリクエストパスに応じて分岐させ、`/admin` 配下では `admin.login`／`Admin::landingRouteName()` の解決結果（後述）へ振り分けた | 分岐しない場合、未ログインの管理者が顧客用ログイン画面へ、ログイン済みの管理者が顧客用ダッシュボードへ誤って遷移する |
+| ログイン試行のレート制限の実装位置 | `throttle` ミドルウェアではなく、`App\Livewire\Admin\Auth\Login::login()` アクション内で `RateLimiter` を直接使用する | Livewireのアクションは `/livewire/update` エンドポイント経由で呼ばれ、ルートの `throttle` ミドルウェアではログインIDをキーにできないため |
+| 無効化された管理者のログイン拒否 | `Auth::guard('admin')->attempt()` の資格情報配列に `is_active => true` を含める。Eloquent User Providerが `password` 以外のキーをクエリ条件として扱うため、追加のコードなしで17.1.2-6を満たす | `retrieveByCredentials()` の標準動作を利用することで、個別の条件分岐を避けられる |
+| 全館横断参照の権限判定 | `App\Policies\CinemaPolicy::viewAllCinemas` に集約する。`App\Models\Scopes\CinemaScope`（グローバルスコープ）は、このPolicyの結果でスコープ適用の要否を分岐する | 13.4.2が役割名の直接比較を禁止しており、`CinemaScope`単体に判定を持たせると比較箇所が分散する。メソッド名はLaravel標準の`viewAny`（一覧の閲覧可否）と意味が異なる（4.8.2は館マスタの閲覧を`cinema-admin`にも許可している）ため衝突を避けた |
+| `CinemaScope` の適用範囲と既知の制約 | 本タスク（工程3-a）では `Theater` のみに適用し、T-02（13.6）の検証対象とした。`Booking`・`Post`・`Banner` 等の他の `cinema_id` 保有モデルへの適用は、各モデルの管理画面を実装するタスクで行う。**既知の制約**: `CinemaScope` は `admin` ガードのセッションの有無のみで判定しており、`cinema-admin` が同一ブラウザで顧客側ページ（front）を開いた場合にも適用される（13.4.1は「管理画面では」と適用範囲を限定しているが、実装はそれより広い）。逸脱の方向は fail-safe（顧客側で過剰に絞り込まれる。他館データの漏洩側には倒れない）。`cinema_id` が未設定の役割で発生する下記の403も同様に顧客側ページで生じ得る。現時点では顧客側コードが `Theater` を参照しておらず実害は無いが、工程4以降で `Theater` を参照する顧客画面（P-22等）を実装する際に見直すこと | `CinemaScope`の実装自体は admin ガード導入時（本タスク）に確定させる必要があるが（4.1.3追記表388行目）、未実装の管理画面に先行してスコープを適用しても検証手段がない。適用範囲をルート名（`Route::current()`）や既定ガード（`Auth::getDefaultDriver()`）で限定する案は、前者はコンソール・キュー等ルート文脈を持たない実行経路で判定が揺れ、後者はLivewire化後の`/livewire/update`経由リクエストで既定ガードが`web`のままになり得るため見送った |
+| `cinema_id` 未設定の管理者に対する `CinemaScope` の挙動 | 全館横断が許可されない役割（`cinema-admin`・`gate`）で `m_admins.cinema_id` が `null` の場合、0件を返さず`HttpException(403)`を送出する | `cinema_id`がnullable（4.8.4）のため、登録時の設定漏れが「空の一覧」として現れると原因特定が困難になる。実装ミスとして即座に検出する |
+| 管理画面の各画面への到達可否（4.8.2 / 4.8.5 / 17.1.3） | `AppServiceProvider` に `view-admin-screen` Gate を定義し、ルート名を引数に判定する（`gate`ロールは`admin.gate.index`のみ、`cinema-admin`はバナー・管理者アカウント管理を除く全画面）。`App\Http\Middleware\AuthorizeAdminScreen` がこのGateを全 `admin.*` ルートに強制し、`resources/views/layouts/admin.blade.php` のサイドバーも同じGateで表示項目を絞る。**このGateは「画面に到達できるか」のみを判定する。** 作成・更新等の個別操作の可否（4.8.2の「閲覧」列等）は、各画面の実装時にPolicyで別途担保すること（未知のルート名は既定で許可されるfail-openな設計のため）。Bladeでは `@can` ではなく `Gate::forUser($currentAdmin)->allows(...)` を使う（`@can`はGateの既定ガードの解決に暗黙に依存するため。13.4.2の「Blade では `@can`」の原則に対する例外） | 17.15 T-12（`gate`ロールが入場確認以外へアクセスできないこと）を満たす必要がある。役割比較をGate定義1箇所に集約し、ルート・ビューの両方が同じ判定を参照することで、画面ごとの条件分岐（13.4.2で禁止）を避けた |
+| ログイン成功時・再訪問時の遷移先 | `Admin::landingRouteName()` が `view-admin-screen` Gateで到達可能な最初の画面（`admin.dashboard`→`admin.gate.index`の順）を返す。`App\Livewire\Admin\Auth\Login::login()` と `bootstrap/app.php` の `redirectUsersTo()` の双方がこれを使う | `gate`ロールはダッシュボードへ到達できないため、遷移先を`admin.dashboard`に固定するとログイン直後に403になり、`/admin/login`へ戻っても`redirectUsersTo`が同じ場所へ送り返す無限ループになる |
+| 管理者ログアウトの実装 | `Auth::guard('admin')->logout()` の後、`Session::invalidate()`（セッション全体を破棄）ではなく `$request->session()->regenerate()`（IDの再生成のみ）を呼ぶ。**既知の制約**: 顧客側のログアウト（Fortify標準）は逆に`Session::invalidate()`を使っており、admin→customer方向のみ「道連れにしない」を担保している（customer→admin方向は未対応） | `admin`ガードと`web`ガードはCookie（セッション）を共有するため、`invalidate()`だと同一ブラウザの顧客ログインも道連れで失われる。17.1.2-1の「セッションを分離する」はガード単位の分離であり、Cookie自体の分離までは求めていない |
+| 管理者ログインのレート制限のキー | ログインID+IPのキーに加え、IP単独のキー（`admin-login\|{ip}`）も5回/分でチェックする。**既知の制約**: IP単独キーは館内で同一グローバルIPを共有する複数の管理者・ゲート端末間でも共有される。1名の入力ミスが5回に達すると、同じ館の他の管理者・ゲート端末も1分間ログインできない | 17.1.2の【根拠】が「管理者は顧客より強度要件を高く設定する」としているが、ログインID+IPのキーのみでは同一IPからログインIDを変えながらの総当たりを防げない（顧客側17.1.1-3の「同一IPおよび同一メールアドレス」と同様の考え方） |
+| A-02〜A-16 の応答 | A-01（ログイン）のみ実装する。A-02（ダッシュボード）は管理者名・役割・所属館の表示と、集計項目が未実装である旨の案内のみとする。A-03〜A-16は `App\Http\Controllers\Admin\PagePlaceholderController` が画面IDのみを返す（12章 残課題） | 集計対象の上映回・予約データを扱う管理画面（マスタ管理・上映編成・上映回登録）が本タスクの後続であり、実データが無い段階では実装できないため |
+| A-14（管理者アカウント）のルート名 | `admin.account.index` とする（`admin.`グループ+`admin.index`ではなく`account.index`） | `name('admin.')`グループ内で`admin.index`と命名すると`admin.admin.index`となり可読性が低い |
+| `gate` ロールが到達できる画面 | `admin.gate.index` のみ。A-15（パスワード変更）にも到達できない | 17.1.3「入場確認以外の操作を行えないようにする」を厳格に適用した。4.8.4-5がパスワード再設定を`super-admin`の役割としているため、`gate`自身によるパスワード変更を想定していない |
+| 管理画面がLivewire化された際の追加対応（将来） | `AuthorizeAdminScreen`はルート名ベースの画面到達可否のみを検証する。各画面がLivewireコンポーネント化された後、`/livewire/update`経由のアクション呼び出し（例: 一覧の絞り込み変更、削除ボタン等）に対しては、コンポーネント側で`$this->authorize()`等による個別の権限判定が別途必要になる | ミドルウェアは初回のページ読み込み（フルページロード）のみを保護し、以降のLivewireアクション呼び出しの権限までは保証しない |
 
 ### 4.9 F-09 静的コンテンツ
 
@@ -2306,6 +2326,7 @@ B-03 は `t_stamps.reservation_id` のユニーク制約により多重実行時
 | 9 | 実装 | `vendor/bin/phpstan analyse` が PHP 既定の `memory_limit`（128M）に達して停止する。現状は `--memory-limit=1G` を都度付けて回避している。`composer.json` の `types:check` は素の `phpstan analyse` のため、`ci:check` 経由のCIでも同じく停止する。CI/CD の構成を検討する際にあわせて解決すること | 16.2 V-02 / 16.3 |
 | 10 | 仕様 | ロゴ画像素材が未用意のため、共通レイアウトのヘッダー（7.2.1-1）は暫定的にテキストリンク（`front.header.logo_alt`）としている。素材が用意でき次第、画像に差し替えること | 7.2.1 |
 | 11 | 残課題 | 共通レイアウト（`components/front/layout.blade.php`）が `<title>` のみで、19.2 の meta description、19.3 の canonical・OGP・Twitter Card・構造化データ・パンくずリストを実装していない。各画面の実装（該当フェーズ、11.1）で併せて実装すること | 19.2 / 19.3 |
+| 12 | 残課題 | 管理画面のダッシュボード（A-02）は集計項目（7.16）を未実装（案内表示のみ）とし、A-03〜A-16 は `App\Http\Controllers\Admin\PagePlaceholderController` を暫定の応答とし `resources/views/admin/placeholder.blade.php` を共用している（4.8.6追記表）。該当フェーズ（11.1）で画面ごとの実装へ差し替え、使用箇所が無くなった時点で両者を削除すること | 4.8.6 / 7.1.1 / 11.1 |
 
 ---
 

@@ -1,7 +1,9 @@
 <?php
 
+use App\Enums\AdminRole;
 use App\Enums\ContactType;
 use App\Enums\ReservationStatus;
+use App\Models\Admin;
 use App\Models\Booking;
 use App\Models\Cinema;
 use App\Models\Format;
@@ -77,6 +79,22 @@ function createCinema(?string $slug = null, string $name = 'テスト館'): Cine
         'facility_info' => 'テスト',
         'access_note' => 'テスト',
         'map_embed_url' => 'https://example.com/map',
+    ]);
+}
+
+/**
+ * テスト用の管理者を1件作成する。パスワードは平文 'password'（Adminモデルの
+ * casts()が'hashed'のため自動ハッシュ化される）。
+ */
+function createAdmin(AdminRole $role = AdminRole::SuperAdmin, ?Cinema $cinema = null): Admin
+{
+    return Admin::create([
+        'login_id' => 'admin-'.Str::lower(Str::random(8)),
+        'password' => 'password',
+        'name' => 'テスト管理者',
+        'role' => $role,
+        'cinema_id' => $cinema?->id,
+        'is_active' => true,
     ]);
 }
 
