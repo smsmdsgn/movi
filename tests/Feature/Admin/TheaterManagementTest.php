@@ -27,7 +27,7 @@ it('super-admin は全館のシアターを閲覧でき、館セレクタが表�
         ->assertOk()
         ->assertSee('祇園ムビ')
         ->assertSee('ムビ京都')
-        ->assertSee(__('admin.theater.all_cinemas'));
+        ->assertSee(__('admin.common.all_cinemas'));
 });
 
 it('super-admin は館セレクタで特定館に絞り込める（4.8.1-2）', function () {
@@ -55,7 +55,7 @@ it('cinema-admin は自館のシアターのみ閲覧でき、館セレクタが
         ->assertOk()
         ->assertSee('祇園1番')
         ->assertDontSee('京都1番')
-        ->assertDontSee(__('admin.theater.all_cinemas'));
+        ->assertDontSee(__('admin.common.all_cinemas'));
 });
 
 it('cinema-admin にはシアターの編集ボタンが表示されない（4.8.2）', function () {

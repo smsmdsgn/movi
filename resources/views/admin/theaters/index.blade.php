@@ -9,7 +9,7 @@
 
         @if ($canSelectCinema)
             <flux:select wire:model.live="selectedCinemaId" class="w-56">
-                <flux:select.option value="">{{ __('admin.theater.all_cinemas') }}</flux:select.option>
+                <flux:select.option value="">{{ __('admin.common.all_cinemas') }}</flux:select.option>
                 @foreach ($cinemas as $cinema)
                     <flux:select.option value="{{ $cinema->id }}">{{ $cinema->name }}</flux:select.option>
                 @endforeach

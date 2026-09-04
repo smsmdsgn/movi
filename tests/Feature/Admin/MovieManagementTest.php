@@ -245,6 +245,45 @@ it('TMDBが5xxを返した場合は errors.tmdb_request_failed が表示され�
         ->assertSee(__('admin.movie.errors.tmdb_request_failed'));
 });
 
+it('所属館を持つ super-admin でも、他館の上映編成が使う規格は外せない（6.6 / 13.4.1）', function () {
+    // `Booking` は CinemaScope の対象（4.8.6追記表）。この判定が全館の上映編成を
+    // 見られるのは、A-05 の編集が super-admin 限定でスコープが適用されないため。
+    // 権限やスコープの変更でここが自館だけになると、6.6 が禁じる組み合わせが通る。
+    $ownCinema = createCinema('gion', '祇園ムビ');
+    $otherCinema = createCinema('kyoto', 'ムビ京都');
+    $formatA = Format::create(['name' => '2D', 'default_surcharge' => 0]);
+    $formatB = Format::create(['name' => 'MOVI GRAND', 'default_surcharge' => 800]);
+
+    $movie = Movie::create([
+        'tmdb_id' => 901,
+        'title' => '作品J',
+        'synopsis' => 'あらすじJ',
+        'runtime_minutes' => 100,
+        'released_on' => now()->subYear(),
+    ]);
+    $movie->formats()->sync([$formatA->id, $formatB->id]);
+
+    Booking::create([
+        'cinema_id' => $otherCinema->id,
+        'movie_id' => $movie->id,
+        'format_id' => $formatA->id,
+        'starts_on' => now(),
+        'ends_on' => now()->addWeek(),
+        'surcharge' => 0,
+    ]);
+
+    $this->actingAs(createAdmin(AdminRole::SuperAdmin, $ownCinema), 'admin');
+
+    Livewire::test(Index::class)
+        ->call('edit', $movie->id)
+        ->set('format_ids', [$formatB->id])
+        ->call('save')
+        ->assertHasErrors(['format_ids']);
+
+    expect($movie->fresh()->formats->pluck('id')->sort()->values()->all())
+        ->toBe(collect([$formatA->id, $formatB->id])->sort()->values()->all());
+});
+
 it('既に上映編成が登録されている規格を対応規格から外せない（6.6）', function () {
     $cinema = createCinema();
     $formatA = Format::create(['name' => '2D', 'default_surcharge' => 0]);
@@ -272,12 +311,17 @@ it('既に上映編成が登録されている規格を対応規格から外せ�
 
     Livewire::test(Index::class)
         ->call('edit', $movie->id)
+        ->set('title', '作品I（改題）')
         ->set('format_ids', [$formatB->id])
         ->call('save')
         ->assertHasErrors(['format_ids']);
 
     expect($movie->fresh()->formats->pluck('id')->sort()->values()->all())
         ->toBe(collect([$formatA->id, $formatB->id])->sort()->values()->all());
+
+    // 判定はA-08と直列化するため保存と同一トランザクション内にあるが（4.8.6追記表）、
+    // 書き込みの前に打ち切るため、同時に編集した他の項目も保存されない。
+    expect($movie->fresh()->title)->toBe('作品I');
 });
 
 it('super-admin は既存の映画を編集して保存できる（4.8.5）', function () {

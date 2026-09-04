@@ -213,19 +213,29 @@ class Index extends Component
         $formatIds = $data['format_ids'] ?? [];
         unset($data['format_ids']);
 
-        if ($movie !== null && $movie->bookings()->whereNotIn('format_id', $formatIds)->exists()) {
-            // 6.6 は上映編成の登録時に映画とシアター双方が対応する規格のみ選択可能としており、
-            // 登録後に映画側の対応規格を外すと既存の上映編成が設計上ありえない組み合わせになるため。
-            $this->addError('format_ids', __('admin.movie.errors.format_in_use'));
-
-            return;
-        }
-
         $data['original_title'] = $data['original_title'] !== '' ? $data['original_title'] : null;
         $data['poster_path'] = $data['poster_path'] !== '' ? $data['poster_path'] : null;
         $data['genres'] = $this->parseGenres($data['genres'] ?? '');
 
-        DB::transaction(function () use (&$movie, $data, $formatIds): void {
+        $formatInUse = DB::transaction(function () use (&$movie, $data, $formatIds): bool {
+            if ($movie !== null) {
+                // A-08（上映編成の登録）と直列化するため、対象の映画行をロックしてから
+                // 既存の上映編成を確認する（4.8.6追記表）。6.6 は上映編成の登録時に
+                // 映画とシアター双方が対応する規格のみ選択可能としており、登録後に
+                // 映画側の対応規格を外すと既存の上映編成が設計上ありえない組み合わせになる。
+                // この整合は外部キーで表現できないため、確認と同期をロックの内側に置く。
+                //
+                // `Booking` は `CinemaScope`（13.4.1）の対象だが、この判定は全館の
+                // 上映編成を見る必要がある。成立しているのは 4.8.2 が映画マスタの編集を
+                // super-admin に限り（`MoviePolicy::update`）、その役割ではスコープが
+                // 適用されないため（4.8.6追記表）。
+                Movie::whereKey($movie->id)->lockForUpdate()->first();
+
+                if ($movie->bookings()->whereNotIn('format_id', $formatIds)->exists()) {
+                    return true;
+                }
+            }
+
             if ($movie === null) {
                 $movie = Movie::create($data);
             } else {
@@ -233,7 +243,15 @@ class Index extends Component
             }
 
             $movie->formats()->sync($formatIds);
+
+            return false;
         });
+
+        if ($formatInUse) {
+            $this->addError('format_ids', __('admin.movie.errors.format_in_use'));
+
+            return;
+        }
 
         // 作成直後は編集対象として保持する。これを行わないと、同じモーダルから
         // 再度 save() が呼ばれた際に `tmdb_id` の一意制約違反となり、`tmdb_id` の
