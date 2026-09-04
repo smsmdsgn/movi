@@ -176,6 +176,85 @@ test('sibling theaters in the same cinema are not scheduled identically', functi
     expect($moviesA->toArray())->not->toBe($moviesB->toArray());
 });
 
+test('sibling theaters share one booking when they run the same movie, format and period', function () {
+    // 4.8.3 は上映編成を館単位（t_bookings に theater_id が無い）と定めるため、
+    // 同一館・同一作品・同一規格・同一期間の編成が複数行に割れてはならない。
+    $theaterA = createTheater();
+    $theaterA->formats()->sync(Format::whereIn('name', ['2D'])->pluck('id'));
+    $theaterB = Theater::create(['cinema_id' => $theaterA->cinema_id, 'number' => 2, 'name' => '2番シアター']);
+    $theaterB->formats()->sync(Format::whereIn('name', ['2D'])->pluck('id'));
+
+    // 作品が1本しか無いため、両シアターは常に同じ作品・規格・期間を選ぶ。
+    attachTestMovie(['tmdb_id' => 990009, 'title' => 'テスト映画I', 'runtime_minutes' => 100, 'released_on' => '2024-01-01']);
+
+    Artisan::call('db:seed', ['--class' => ScreeningSeeder::class, '--force' => true]);
+
+    $bookings = Booking::where('cinema_id', $theaterA->cinema_id)->get();
+    $uniqueKeys = $bookings->map(fn (Booking $booking) => implode('-', [
+        $booking->movie_id,
+        $booking->format_id,
+        $booking->starts_on->toDateString(),
+        $booking->ends_on->toDateString(),
+    ]))->unique();
+
+    expect($bookings)->not->toBeEmpty();
+    expect($bookings->count())->toBe($uniqueKeys->count());
+
+    // 編成1行に対して、両シアターの上映回がぶら下がっていること。館全体で数えると
+    // シアターごとに編成を作る実装でも通ってしまうため、1行に限定して数える。
+    $sharedTheaterIds = Screening::where('booking_id', $bookings->first()->id)
+        ->distinct()
+        ->pluck('theater_id')
+        ->sort()
+        ->values();
+
+    expect($sharedTheaterIds->all())->toBe(collect([$theaterA->id, $theaterB->id])->sort()->values()->all());
+});
+
+test('re-seeding after adding a sibling theater reuses the existing bookings', function () {
+    // 増分実行（既にシード済みの館へシアターを追加して再実行）で、上映編成が
+    // 増えず、新シアターの上映回が既存の編成にぶら下がることを固定する。
+    $theaterA = createTheater();
+    $theaterA->formats()->sync(Format::whereIn('name', ['2D'])->pluck('id'));
+    attachTestMovie(['tmdb_id' => 990010, 'title' => 'テスト映画J', 'runtime_minutes' => 100, 'released_on' => '2024-01-01']);
+
+    Artisan::call('db:seed', ['--class' => ScreeningSeeder::class, '--force' => true]);
+
+    $bookingIds = Booking::where('cinema_id', $theaterA->cinema_id)->pluck('id');
+
+    $theaterB = Theater::create(['cinema_id' => $theaterA->cinema_id, 'number' => 2, 'name' => '2番シアター']);
+    $theaterB->formats()->sync(Format::whereIn('name', ['2D'])->pluck('id'));
+
+    Artisan::call('db:seed', ['--class' => ScreeningSeeder::class, '--force' => true]);
+
+    expect(Booking::where('cinema_id', $theaterA->cinema_id)->pluck('id')->all())->toBe($bookingIds->all());
+
+    $newScreeningBookingIds = Screening::where('theater_id', $theaterB->id)->distinct()->pluck('booking_id');
+
+    expect($newScreeningBookingIds)->not->toBeEmpty();
+    expect($newScreeningBookingIds->diff($bookingIds)->all())->toBe([]);
+});
+
+test('every screening belongs to a theater in the same cinema as its booking', function () {
+    // 上映回のシアターと編成の館の一致は外部キーで表現できない
+    // （t_screenings.theater_id → m_theaters、t_bookings.cinema_id → m_cinemas）。
+    // 1編成に複数シアターがぶら下がる形になったため、不変条件として固定する。
+    $theaterA = createTheater();
+    $theaterA->formats()->sync(Format::whereIn('name', ['2D'])->pluck('id'));
+    $theaterB = createTheater();
+    $theaterB->formats()->sync(Format::whereIn('name', ['2D'])->pluck('id'));
+    attachTestMovie(['tmdb_id' => 990011, 'title' => 'テスト映画K', 'runtime_minutes' => 100, 'released_on' => '2024-01-01']);
+
+    Artisan::call('db:seed', ['--class' => ScreeningSeeder::class, '--force' => true]);
+
+    $mismatched = Screening::with(['booking', 'theater'])
+        ->get()
+        ->filter(fn (Screening $screening) => $screening->theater->cinema_id !== $screening->booking->cinema_id);
+
+    expect(Screening::count())->toBeGreaterThan(0);
+    expect($mismatched)->toBeEmpty();
+});
+
 test('re-seeding a theater that already has screenings does not duplicate them', function () {
     $theater = createTheater();
     $theater->formats()->sync(Format::whereIn('name', ['2D'])->pluck('id'));

@@ -19,6 +19,8 @@ use Illuminate\Support\Facades\DB;
  * （4.1.1）を作り込むコストに見合わないため、祇園ムビも含めた全7館・45シアターに
  * 同一のアルゴリズムを適用する（6.1追記表参照）。
  * 冪等性はシアター単位で判定する（`t_bookings` に theater_id が無いため）。
+ * 上映編成そのものは館単位で、同一館・同一作品・同一規格・同一期間なら
+ * 兄弟シアター間で1行を共有する（`generateForTheater()`）。
  */
 class ScreeningSeeder extends Seeder
 {
@@ -88,14 +90,20 @@ class ScreeningSeeder extends Seeder
             $format = $this->pickFormat($movie, $theaterFormatIds);
             $runEnd = $cursor->addDays(SeedConfig::BOOKING_RUN_DAYS)->min($end);
 
-            $booking = Booking::create([
-                'cinema_id' => $theater->cinema_id,
-                'movie_id' => $movie->id,
-                'format_id' => $format->id,
-                'starts_on' => $cursor->toDateString(),
-                'ends_on' => $runEnd->subDay()->toDateString(),
-                'surcharge' => $format->default_surcharge,
-            ]);
+            // 同一館の兄弟シアターが同じ作品・規格・期間を選んだ場合は上映編成を
+            // 1行に共有する。4.8.3 は上映編成を館単位、上映回をシアター単位と定めており
+            // （`t_bookings` に theater_id が無い）、シアターごとに作ると同一の編成が
+            // 館内に複数行できる。
+            $booking = Booking::firstOrCreate(
+                [
+                    'cinema_id' => $theater->cinema_id,
+                    'movie_id' => $movie->id,
+                    'format_id' => $format->id,
+                    'starts_on' => $cursor->toDateString(),
+                    'ends_on' => $runEnd->subDay()->toDateString(),
+                ],
+                ['surcharge' => $format->default_surcharge]
+            );
 
             $screenings[] = $this->screeningsForBooking($booking, $theater, $movie, $cursor, $runEnd);
 
