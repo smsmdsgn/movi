@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Enums\BannerPosition;
 use App\Enums\SeatDisplayClass;
 use App\Models\Cinema;
+use App\Models\Screening;
 
 /**
  * シーダーの生成規模・固定構成を定数として集約する（docs/design.md 6.3.3 / 9章、13章）。
@@ -203,11 +204,15 @@ class SeedConfig
     /** 営業終了時刻。この時刻を超えて上映が終わる回は作らない。 */
     public const string DAILY_LAST_SCREENING_END_TIME = '23:55';
 
-    /** 予告編の時間（分）。上映回の終了時刻の自動計算に使う（4.8.3-3）。 */
-    public const int TRAILER_MINUTES = 15;
+    /**
+     * 予告編の時間（分）。上映回の終了時刻の自動計算に使う（4.8.3-3）。
+     * A-09（上映回の登録）も同じ規則で終了時刻を算出するため、業務ルールとしての
+     * 実体は `Screening` に置き、ここからは参照するにとどめる。
+     */
+    public const int TRAILER_MINUTES = Screening::TRAILER_MINUTES;
 
     /** 同一シアターの上映回どうしに空ける最小間隔（分、清掃・入替時間。4.8.3-4）。 */
-    public const int SCREENING_INTERVAL_MINUTES = 30;
+    public const int SCREENING_INTERVAL_MINUTES = Screening::INTERVAL_MINUTES;
 
     /** 直近公開の作品群（対象は公開済み作品の上位1/N）から選ぶ確率（%）。9.1「公開年の新しい作品を優先する」の近似に使う。 */
     public const int RECENT_MOVIE_BIAS_PERCENT = 70;

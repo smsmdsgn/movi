@@ -9,6 +9,7 @@ use App\Livewire\Admin\Bookings\Index as BookingIndex;
 use App\Livewire\Admin\Cinemas\Index as CinemaIndex;
 use App\Livewire\Admin\Formats\Index as FormatIndex;
 use App\Livewire\Admin\Movies\Index as MovieIndex;
+use App\Livewire\Admin\Screenings\Index as ScreeningIndex;
 use App\Livewire\Admin\Theaters\Index as TheaterIndex;
 use App\Livewire\Admin\TicketTypes\Index as TicketTypeIndex;
 use Illuminate\Support\Facades\Route;
@@ -19,8 +20,9 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 |
 | A-01（ログイン）・A-03（館マスタ）・A-04（シアター・座席）・A-05（映画マスタ）・
-| A-06（上映規格マスタ）・A-07（券種・料金マスタ）・A-08（上映編成）を実装。
-| A-02（ダッシュボード）は最低限の実装、A-09〜A-16 は工程3-aでは
+| A-06（上映規格マスタ）・A-07（券種・料金マスタ）・A-08（上映編成）・
+| A-09（上映回）を実装。
+| A-02（ダッシュボード）は最低限の実装、A-10〜A-16 は工程3-aでは
 | ルート骨格のみで、PagePlaceholderController が画面IDのみを返す（12章 残課題）。
 | 各画面の実装（該当フェーズ、11.1）で画面ごとの内容へ差し替える。
 |
@@ -40,7 +42,7 @@ Route::prefix('admin')->group(function (): void {
         Route::get('formats', FormatIndex::class)->name('format.index');
         Route::get('ticket-types', TicketTypeIndex::class)->name('ticket-type.index');
         Route::get('bookings', BookingIndex::class)->name('booking.index');
-        Route::get('screenings', PagePlaceholderController::class)->defaults('screenId', 'A-09')->name('screening.index');
+        Route::get('screenings', ScreeningIndex::class)->name('screening.index');
         Route::get('reservations', PagePlaceholderController::class)->defaults('screenId', 'A-10')->name('reservation.index');
         Route::get('reservations/search', PagePlaceholderController::class)->defaults('screenId', 'A-11')->name('reservation.search');
         Route::get('posts', PagePlaceholderController::class)->defaults('screenId', 'A-12')->name('post.index');

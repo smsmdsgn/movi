@@ -23,6 +23,15 @@ class Screening extends Model
 {
     protected $table = 't_screenings';
 
+    /**
+     * 予告編の時間（分）。終了時刻の自動計算に用いる（4.8.3-3）。
+     * A-09（登録画面）と `ScreeningSeeder`（`SeedConfig`）の双方がこれを参照する。
+     */
+    public const int TRAILER_MINUTES = 15;
+
+    /** 同一シアターの上映回どうしに空ける最小間隔（分。清掃・入替時間、4.8.3-4）。 */
+    public const int INTERVAL_MINUTES = 30;
+
     protected function casts(): array
     {
         return [

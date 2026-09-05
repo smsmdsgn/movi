@@ -2,13 +2,12 @@
 
 use App\Enums\AdminRole;
 
-it('管理画面（4.8.5 A-09〜A-16）のルートが認証済み管理者に画面IDを返す', function (string $routeName, string $screenId) {
+it('管理画面（4.8.5 A-10〜A-16）のルートが認証済み管理者に画面IDを返す', function (string $routeName, string $screenId) {
     $this->actingAs(createAdmin(), 'admin')
         ->get(route($routeName))
         ->assertOk()
         ->assertSee($screenId);
 })->with([
-    'A-09 上映回' => ['admin.screening.index', 'A-09'],
     'A-10 予約状況' => ['admin.reservation.index', 'A-10'],
     'A-11 予約検索' => ['admin.reservation.search', 'A-11'],
     'A-12 お知らせ' => ['admin.post.index', 'A-12'],
@@ -24,7 +23,6 @@ it('cinema-admin はバナー・管理者アカウント管理を除く全画面
         ->assertOk()
         ->assertSee($screenId);
 })->with([
-    'A-09 上映回' => ['admin.screening.index', 'A-09'],
     'A-10 予約状況' => ['admin.reservation.index', 'A-10'],
     'A-11 予約検索' => ['admin.reservation.search', 'A-11'],
     'A-12 お知らせ' => ['admin.post.index', 'A-12'],
@@ -57,6 +55,7 @@ it('未ログインで管理画面配下にアクセスすると admin.login へ
     'A-06 上映規格マスタ' => ['admin.format.index'],
     'A-07 券種・料金マスタ' => ['admin.ticket-type.index'],
     'A-08 上映編成' => ['admin.booking.index'],
+    'A-09 上映回' => ['admin.screening.index'],
 ]);
 
 it('gate ロールは入場ゲート以外の管理画面へ到達できない（T-12 / 17.1.3）', function (string $routeName) {
@@ -71,6 +70,7 @@ it('gate ロールは入場ゲート以外の管理画面へ到達できない�
     'A-06 上映規格マスタ' => ['admin.format.index'],
     'A-07 券種・料金マスタ' => ['admin.ticket-type.index'],
     'A-08 上映編成' => ['admin.booking.index'],
+    'A-09 上映回' => ['admin.screening.index'],
     'A-13 バナー' => ['admin.banner.index'],
 ]);
 
