@@ -84,6 +84,29 @@ class Reservation extends Model
     }
 
     /**
+     * 予約者名。会員は `users.name`、非会員は `guest_name` を用いる（4.8.5）。
+     *
+     * **メールアドレスはこのメソッドでも画面でも扱わない**（4.8.5: 予約状況・
+     * 予約検索の表示範囲はメールアドレスおよび決済情報を含まない）。
+     * `user` を参照するため、呼び出し側で eager load すること
+     * （`Model::preventLazyLoading` が有効）。
+     */
+    public function displayName(): string
+    {
+        return $this->contact_type === ContactType::Member
+            ? (string) $this->user?->name
+            : (string) $this->guest_name;
+    }
+
+    /**
+     * 入場済みか（4.6）。入場は予約単位で記録する（`checked_in_at`）。
+     */
+    public function isCheckedIn(): bool
+    {
+        return $this->checked_in_at !== null;
+    }
+
+    /**
      * @return HasMany<ReservationSeat, $this>
      */
     public function seats(): HasMany
