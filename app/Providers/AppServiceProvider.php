@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Enums\AdminRole;
+use App\Http\Middleware\EnsureAdminIsActive;
 use App\Models\Admin;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
@@ -11,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Livewire\Livewire;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -29,6 +31,12 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
         $this->configureAdminScreenGate();
+
+        // 無効化された管理者のセッション打ち切り（17.1.2-6）を `/livewire/update`
+        // 経由のアクション呼び出しにも効かせる。Livewireは、元のリクエストの
+        // ルートに付いていたミドルウェアのうちこのリストにあるものだけを再適用する
+        // ため、管理画面（routes/admin.php）以外へは波及しない。
+        Livewire::addPersistentMiddleware(EnsureAdminIsActive::class);
     }
 
     /**

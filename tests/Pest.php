@@ -105,6 +105,29 @@ function validCinemaForm(array $overrides = []): array
 }
 
 /**
+ * A-14（管理者アカウント管理）のLivewireフォームに投入する入力値一式を返す。
+ * `$overrides` で一部の項目だけ差し替えて検証できる。
+ *
+ * **既定値のままでは通過しない。** 既定の役割が `cinema-admin` であり、この役割は
+ * 所属館が必須（4.8.6追記表）のため、呼び出し側で `cinema_id` を指定するか
+ * `role` を `super-admin` へ差し替えること。
+ *
+ * @param  array<string, string>  $overrides
+ * @return array<string, string>
+ */
+function validAccountForm(array $overrides = []): array
+{
+    return array_merge([
+        'login_id' => 'gion-admin',
+        'name' => '祇園館 管理者',
+        'role' => AdminRole::CinemaAdmin->value,
+        'cinema_id' => '',
+        'password' => 'correct-horse-battery',
+        'password_confirmation' => 'correct-horse-battery',
+    ], $overrides);
+}
+
+/**
  * テスト用の管理者を1件作成する。パスワードは平文 'password'（Adminモデルの
  * casts()が'hashed'のため自動ハッシュ化される）。
  */
