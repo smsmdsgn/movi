@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 版数 | 8.45 |
+| 版数 | 8.46 |
 | 作成日 | 2026-08-11 |
 | 開発体制 | 1名 |
 
@@ -2871,6 +2871,9 @@ model: sonnet
 
 | 変数 | 用途 |
 |---|---|
+| `APP_ENV` | ローカルは `local`、本番は `production` |
+| `APP_KEY` | `php artisan key:generate` で生成する。雛形では空にしておく |
+| `APP_DEBUG` | ローカルは `true`、本番は `false` |
 | `APP_TIMEZONE` | `Asia/Tokyo` |
 | `DB_CONNECTION` | `mariadb` |
 | `DB_DATABASE` / `DB_USERNAME` / `DB_PASSWORD` | エックスサーバーのDB情報 |
@@ -2881,6 +2884,7 @@ model: sonnet
 | `TMDB_API_KEY` | TMDB APIキー |
 | `TURNSTILE_SITE_KEY` | `1x00000000000000000000AA` |
 | `TURNSTILE_SECRET_KEY` | `1x0000000000000000000000000000000AA` |
+| `SESSION_SECURE_COOKIE` | 本番（HTTPS）は `true`。`config/session.php` の `secure` は既定値を持たず、未設定だとセッションCookieに `Secure` 属性が付かない（17.7-2）。`HttpOnly` と `SameSite` は config 側に既定値があるため設定漏れでも要件を満たすが、`Secure` のみ環境変数が必須 |
 
 ### 15.2 セットアップ手順（ローカル）
 
