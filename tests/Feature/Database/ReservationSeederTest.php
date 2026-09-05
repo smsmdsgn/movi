@@ -7,6 +7,7 @@ use App\Models\Reservation;
 use App\Models\ReservationSeat;
 use App\Models\Stamp;
 use App\Models\TicketType;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Database\Seeders\GionSeeder;
 use Database\Seeders\MasterDataSeeder;
@@ -23,6 +24,34 @@ use Illuminate\Support\Facades\Artisan;
 beforeEach(function () {
     Artisan::call('db:seed', ['--class' => MasterDataSeeder::class, '--force' => true]);
 });
+
+/**
+ * 会員1名のスタンプを `SeedConfig::RESERVATION_STAMP_CAP` 件まで積み、そのIDを返す。
+ *
+ * 予約を持つ上映回は `ReservationSeeder` の冪等判定
+ * （`whereDoesntHave('reservations')`）から外れるため、ここで作る上映回と予約は
+ * シーダーに上書きされない。
+ */
+function capUserStamps(): int
+{
+    $user = User::factory()->create();
+    $screening = createScreeningForTheater(createTheater());
+
+    foreach (range(1, SeedConfig::RESERVATION_STAMP_CAP) as $ignored) {
+        $reservation = Reservation::create([
+            'reservation_no' => nextTestReservationNo(),
+            'user_id' => $user->id,
+            'contact_type' => ContactType::Member,
+            'screening_id' => $screening->id,
+            'status' => ReservationStatus::Paid,
+            'total_amount' => 2000,
+        ]);
+
+        Stamp::create(['user_id' => $user->id, 'reservation_id' => $reservation->id]);
+    }
+
+    return $user->id;
+}
 
 test('no seat is reserved more than once for the same screening, and every reservation has at most 8 seats', function () {
     $theater = createTheater();
@@ -240,17 +269,21 @@ test('a member never accumulates more stamps than the configured cap', function 
     $starts = collect(range(1, 13))->map(fn ($i) => now()->subDays($i)->setTime(9, 0))->all();
     makeScreenings($theater, $starts);
 
+    // 上限に到達済みの会員を明示的に用意する。シーダーが上限到達者を「生む」ことに
+    // 依存すると、`capUserStamps()` の説明のとおり AUTO_INCREMENT のずれで結果が変わる。
+    $cappedUserId = capUserStamps();
+
     Artisan::call('db:seed', ['--class' => ReservationSeeder::class, '--force' => true]);
 
-    $maxStampsPerUser = Stamp::selectRaw('user_id, count(*) as stamp_count')
+    $stampCountsPerUser = Stamp::selectRaw('user_id, count(*) as stamp_count')
         ->groupBy('user_id')
-        ->get()
-        ->max('stamp_count');
+        ->pluck('stamp_count', 'user_id');
 
-    expect($maxStampsPerUser)->not->toBeNull();
-    expect($maxStampsPerUser)->toBeLessThanOrEqual(SeedConfig::RESERVATION_STAMP_CAP);
-    // このフィクスチャの生成量であれば、上限に達する会員が実際に現れる
-    expect($maxStampsPerUser)->toBe(SeedConfig::RESERVATION_STAMP_CAP);
+    expect($stampCountsPerUser)->not->toBeEmpty();
+    // 誰も上限を超えない（シーダー内のカウントとDBからの引き継ぎの双方が効いている）
+    expect($stampCountsPerUser->max())->toBeLessThanOrEqual(SeedConfig::RESERVATION_STAMP_CAP);
+    // 既に上限へ達している会員は、実行後も上限のまま据え置かれる
+    expect((int) $stampCountsPerUser[$cappedUserId])->toBe(SeedConfig::RESERVATION_STAMP_CAP);
 });
 
 test('re-seeding does not duplicate reservations, reservation seats, or stamps', function () {
@@ -301,12 +334,20 @@ test('running the seeder raises an error when a ticket type has no configured we
 test('re-seeding after time has advanced carries over reservation numbering, guest contacts, and the stamp cap from the database', function () {
     Artisan::call('db:seed', ['--class' => MemberSeeder::class, '--force' => true]);
 
-    // 上限に到達する会員が確実に現れる規模（'a member never accumulates more stamps
-    // than the configured cap' で実証済みの規模と同じ）にする
     $theater = createTheater();
     makeSeatsWithSurcharge($theater, 200, 0);
     $starts = collect(range(1, 13))->map(fn ($i) => now()->subDays($i)->setTime(9, 0))->all();
     makeScreenings($theater, $starts);
+
+    // スタンプ上限に到達済みの会員をDB上に明示的に用意する。
+    //
+    // **シーダーが上限到達者を生むことに依存してはならない。** このシーダーの
+    // 擬似乱数は `crc32("{$screening->id}-{$groupIndex}")` を種としており
+    // （DeterministicRandom）、MariaDB の AUTO_INCREMENT は RefreshDatabase の
+    // ロールバックで戻らないため、先行するテストが上映回を作った数だけ id が進み
+    // 会員の割り当てが変わる。上限到達者の有無が実行順に左右され、
+    // このテストの前提が壊れる。
+    $cappedUserId = capUserStamps();
 
     Artisan::call('db:seed', ['--class' => ReservationSeeder::class, '--force' => true]);
     $firstRunCount = Reservation::count();
@@ -318,7 +359,7 @@ test('re-seeding after time has advanced carries over reservation numbering, gue
         ->groupBy('user_id')
         ->havingRaw('count(*) = ?', [SeedConfig::RESERVATION_STAMP_CAP])
         ->pluck('user_id');
-    expect($cappedUserIds)->not->toBeEmpty();
+    expect($cappedUserIds)->toContain($cappedUserId);
 
     // 販売期間（実行時刻から3日先まで）は実時刻とともに移動するため、翌日以降の
     // 再実行では新たに対象となる上映回が生じうる。この経路で採番・非会員連絡先・
