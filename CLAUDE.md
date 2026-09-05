@@ -35,6 +35,7 @@ git diff --stat
 3. そのうえで `code-reviewer` と `regression-checker` のサブエージェントでレビューする。
    **指摘が BLOCKER の場合、修正して 2 からやり直す**
 4. コミットは `/mycommit` で行う。`git push` は自動で行わない
+   - **コミットメッセージに `Co-Authored-By: Claude ...` などのAI署名を入れない。** 件名と本文のみ。PR の説明にも同様の署名を付けない
 5. 設計と異なる判断をしたら、実装を完了する前に `docs/design.md` を更新する
 
 ## モデルの使い分け
