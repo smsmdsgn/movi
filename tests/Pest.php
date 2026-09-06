@@ -128,6 +128,22 @@ function validAccountForm(array $overrides = []): array
 }
 
 /**
+ * パスワード変更（A-15）の入力欄を、検証を通過する値で埋めた配列を返す。
+ * `current_password` は `createAdmin()` の既定パスワードに合わせている。
+ *
+ * @param  array<string, string>  $overrides
+ * @return array<string, string>
+ */
+function validPasswordChangeForm(array $overrides = []): array
+{
+    return array_merge([
+        'current_password' => 'password',
+        'password' => 'correct-horse-battery',
+        'password_confirmation' => 'correct-horse-battery',
+    ], $overrides);
+}
+
+/**
  * テスト用の管理者を1件作成する。パスワードは平文 'password'（Adminモデルの
  * casts()が'hashed'のため自動ハッシュ化される）。
  */

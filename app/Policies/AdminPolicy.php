@@ -6,8 +6,9 @@ use App\Enums\AdminRole;
 use App\Models\Admin;
 
 /**
- * 管理者アカウント管理（A-14）の権限を判定する。
+ * 管理者アカウント管理（A-14）とパスワード変更（A-15）の権限を判定する。
  * 4.8.2 は管理者アカウント管理を `super-admin` 限定とし、`cinema-admin`・`gate` は不可。
+ * 自分自身のパスワード変更のみ `cinema-admin` にも許可する（`updateOwnPassword`）。
  *
  * `AuthorizeAdminScreen` ミドルウェアはフルページロードのみを保護し
  * `/livewire/update` 経由のアクション呼び出しには適用されないため（4.8.6追記表）、
@@ -41,6 +42,21 @@ class AdminPolicy
     public function manageAccess(Admin $admin, Admin $target): bool
     {
         return $this->isActiveSuperAdmin($admin) && $admin->id !== $target->id;
+    }
+
+    /**
+     * 自分自身のパスワードを変更できるか（A-15）。対象の選択を伴わないため
+     * クラスレベルのアビリティとして判定する。
+     *
+     * 4.8.2 は「パスワード変更（自分自身）」を `super-admin`・`cinema-admin` の
+     * 双方に許可する。`gate` は入場確認以外の操作を行えない（17.1.3）ため除外する。
+     * `view-admin-screen` Gate と同じ結論だが、同Gateを適用する
+     * `AuthorizeAdminScreen` はフルページロードのみを保護するため、
+     * `/livewire/update` 経由の `save()` はこのアビリティで判定する。
+     */
+    public function updateOwnPassword(Admin $admin): bool
+    {
+        return $admin->is_active && $admin->role !== AdminRole::Gate;
     }
 
     /**
