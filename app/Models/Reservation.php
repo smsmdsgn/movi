@@ -99,6 +99,15 @@ class Reservation extends Model
     }
 
     /**
+     * 予約番号の表示形式（4.3.5）。8桁を4桁ずつハイフンで区切る（例: `1234-5678`）。
+     * 入力側はハイフンの有無を問わず受け付けるため、保存値は数字のみである。
+     */
+    public function formattedReservationNo(): string
+    {
+        return implode('-', str_split($this->reservation_no, 4));
+    }
+
+    /**
      * 入場済みか（4.6）。入場は予約単位で記録する（`checked_in_at`）。
      */
     public function isCheckedIn(): bool

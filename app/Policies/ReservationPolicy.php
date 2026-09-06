@@ -6,7 +6,8 @@ use App\Enums\AdminRole;
 use App\Models\Admin;
 
 /**
- * 予約状況の確認（A-10）の権限を判定する。
+ * 予約状況の確認（A-10）と予約検索（A-11）の権限を判定する。両画面とも
+ * 参照のみで、必要なアビリティは `viewAny` だけである。
  *
  * 4.8.2 は予約状況の確認を `super-admin`（全館）と `cinema-admin`（自館のみ）に
  * 許可し、`gate` は入場確認のみを行う（17.1.3）。館の範囲は本Policyでは扱わず、

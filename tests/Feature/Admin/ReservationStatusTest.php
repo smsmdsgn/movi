@@ -4,69 +4,10 @@ use App\Enums\AdminRole;
 use App\Enums\ContactType;
 use App\Enums\ReservationStatus;
 use App\Livewire\Admin\Reservations\Index;
-use App\Models\Reservation;
-use App\Models\ReservationSeat;
-use App\Models\Screening;
-use App\Models\Seat;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Livewire\Livewire;
-
-/**
- * 本日の上映回1件と、そこに紐づく座席・券種を用意する。
- *
- * @return array{screening: Screening, seat: Seat, ticketTypeId: int}
- */
-function makeTodayScreening(): array
-{
-    [$screening, $seat] = createScreeningWithSeat();
-    $screening->update(['starts_at' => now()->setTime(10, 0), 'ends_at' => now()->setTime(12, 0)]);
-
-    return ['screening' => $screening, 'seat' => $seat, 'ticketTypeId' => createTicketType()->id];
-}
-
-/**
- * 予約を1件、座席つきで作成する。
- *
- * `$releaseSeats` は 6.4.2 の「予約が cancelled または expired に遷移した時点で
- * released_at を設定する」を再現するためのもの。4.4-2 によりキャンセルは予約単位
- * なので、実データでは status と released_at が必ず連動する。
- *
- * @param  array{screening: Screening, seat: Seat, ticketTypeId: int}  $ctx
- * @param  array<string, mixed>  $overrides
- */
-function makeSeatedReservation(array $ctx, array $overrides = [], int $seatAmount = 2000, bool $releaseSeats = false): Reservation
-{
-    $reservation = Reservation::create(array_merge([
-        'reservation_no' => nextTestReservationNo(),
-        'user_id' => null,
-        'guest_name' => '予約 太郎',
-        'guest_name_kana' => 'ヨヤク タロウ',
-        'contact_type' => ContactType::Guest,
-        'guest_email' => 'guest@example.test',
-        'guest_phone' => '090-0000-0000',
-        'screening_id' => $ctx['screening']->id,
-        'status' => ReservationStatus::Paid,
-        'total_amount' => 2000,
-    ], $overrides));
-
-    $reservationSeat = ReservationSeat::create([
-        'reservation_id' => $reservation->id,
-        'screening_id' => $ctx['screening']->id,
-        'seat_id' => $ctx['seat']->id,
-        'ticket_type_id' => $ctx['ticketTypeId'],
-        'amount' => $seatAmount,
-    ]);
-
-    if ($releaseSeats) {
-        // released_at は fillable に含めない（解放は予約のキャンセル処理が行う）。
-        $reservationSeat->released_at = now();
-        $reservationSeat->save();
-    }
-
-    return $reservation;
-}
 
 it('super-admin は本日の上映回の予約状況を閲覧できる（4.8.2）', function () {
     $ctx = makeTodayScreening();
@@ -103,7 +44,7 @@ it('予約明細にメールアドレス・電話番号・金額を表示しな�
         ->call('showReservations', $ctx['screening']->id)
         ->assertSee('予約 太郎')
         ->assertDontSee('guest@example.test')
-        ->assertDontSee('090-0000-0000')
+        ->assertDontSee('09000000000')
         ->assertDontSee('987654');
 });
 
@@ -146,7 +87,7 @@ it('pending と expired の予約は明細に表示しない（座席を持た�
 
     Livewire::test(Index::class)
         ->call('showReservations', $ctx['screening']->id)
-        ->assertDontSee('90000001');
+        ->assertDontSee('9000-0001');
 })->with([
     'pending' => [ReservationStatus::Pending],
     'expired' => [ReservationStatus::Expired],
@@ -163,7 +104,7 @@ it('キャンセル済みの予約は座席・券種つきで明細に残る（6
 
     Livewire::test(Index::class)
         ->call('showReservations', $ctx['screening']->id)
-        ->assertSee('90000002')
+        ->assertSee('9000-0002')
         ->assertSee(__('admin.reservation.state.cancelled'))
         // 窓口での照合に必要なため、解放済みでも座席・券種を落とさない（4.8.5）。
         ->assertSee($ctx['seat']->displayName())

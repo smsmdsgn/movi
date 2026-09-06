@@ -94,7 +94,7 @@
                     <flux:table.rows>
                         @foreach ($reservations as $reservation)
                             <flux:table.row :key="$reservation->id">
-                                <flux:table.cell>{{ $reservation->reservation_no }}</flux:table.cell>
+                                <flux:table.cell>{{ $reservation->formattedReservationNo() }}</flux:table.cell>
                                 <flux:table.cell>{{ $reservation->displayName() }}</flux:table.cell>
                                 <flux:table.cell>
                                     {{ $reservation->seats->map(fn ($seat) => $seat->seat->displayName())->implode('、') }}

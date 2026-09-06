@@ -166,11 +166,11 @@ function createScreeningWithSeat(): array
 {
     $theater = createTheater();
 
-    $seatType = SeatType::create([
-        'name' => '一般',
-        'surcharge' => 0,
-        'display_class' => SeatDisplayClass::Standard,
-    ]);
+    // 同一テスト内で複数回呼べるよう冪等にする（`m_seat_types.name` は一意）。
+    $seatType = SeatType::firstOrCreate(
+        ['name' => '一般'],
+        ['surcharge' => 0, 'display_class' => SeatDisplayClass::Standard],
+    );
 
     $seat = Seat::create([
         'theater_id' => $theater->id,
@@ -217,6 +217,61 @@ function createScreeningForTheater(Theater $theater): Screening
         'starts_at' => now()->addDay(),
         'ends_at' => now()->addDay()->addHours(2),
     ]);
+}
+
+/**
+ * 本日の上映回1件と、そこに紐づく座席・券種を用意する。
+ *
+ * @return array{screening: Screening, seat: Seat, ticketTypeId: int}
+ */
+function makeTodayScreening(): array
+{
+    [$screening, $seat] = createScreeningWithSeat();
+    $screening->update(['starts_at' => now()->setTime(10, 0), 'ends_at' => now()->setTime(12, 0)]);
+
+    return ['screening' => $screening, 'seat' => $seat, 'ticketTypeId' => createTicketType()->id];
+}
+
+/**
+ * 予約を1件、座席つきで作成する。
+ *
+ * `$releaseSeats` は 6.4.2 の「予約が cancelled または expired に遷移した時点で
+ * released_at を設定する」を再現するためのもの。4.4-2 によりキャンセルは予約単位
+ * なので、実データでは status と released_at が必ず連動する。
+ *
+ * @param  array{screening: Screening, seat: Seat, ticketTypeId: int}  $ctx
+ * @param  array<string, mixed>  $overrides
+ */
+function makeSeatedReservation(array $ctx, array $overrides = [], int $seatAmount = 2000, bool $releaseSeats = false): Reservation
+{
+    $reservation = Reservation::create(array_merge([
+        'reservation_no' => nextTestReservationNo(),
+        'user_id' => null,
+        'guest_name' => '予約 太郎',
+        'guest_name_kana' => 'ヨヤク タロウ',
+        'contact_type' => ContactType::Guest,
+        'guest_email' => 'guest@example.test',
+        'guest_phone' => '09000000000',
+        'screening_id' => $ctx['screening']->id,
+        'status' => ReservationStatus::Paid,
+        'total_amount' => 2000,
+    ], $overrides));
+
+    $reservationSeat = ReservationSeat::create([
+        'reservation_id' => $reservation->id,
+        'screening_id' => $ctx['screening']->id,
+        'seat_id' => $ctx['seat']->id,
+        'ticket_type_id' => $ctx['ticketTypeId'],
+        'amount' => $seatAmount,
+    ]);
+
+    if ($releaseSeats) {
+        // released_at は fillable に含めない（解放は予約のキャンセル処理が行う）。
+        $reservationSeat->released_at = now();
+        $reservationSeat->save();
+    }
+
+    return $reservation;
 }
 
 /**
@@ -293,7 +348,11 @@ function createFreeTicket(): FreeTicket
  */
 function createTicketType(): TicketType
 {
-    return TicketType::create(['name' => '大人', 'price' => 2000, 'display_order' => 1]);
+    // 同一テスト内で複数回呼べるよう冪等にする（`m_ticket_types.name` は一意）。
+    return TicketType::firstOrCreate(
+        ['name' => '大人'],
+        ['price' => 2000, 'display_order' => 1],
+    );
 }
 
 /**
