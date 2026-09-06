@@ -142,3 +142,16 @@ it('所属館が未設定の cinema-admin が上映編成を取得しようと�
 
     Booking::all();
 })->throws(HttpException::class);
+
+it('顧客側ページを表示した後も、同一テスト内で cinema-admin の館スコープが復元される（SkipCinemaScope の後始末）', function () {
+    $gion = createCinema('gion', '祇園ムビ');
+    $kyoto = createCinema('kyoto', 'ムビ京都');
+    Theater::create(['cinema_id' => $gion->id, 'number' => 1, 'name' => '1番シアター']);
+    Theater::create(['cinema_id' => $kyoto->id, 'number' => 1, 'name' => '1番シアター']);
+
+    $this->actingAs(createAdmin(AdminRole::CinemaAdmin, $gion), 'admin');
+
+    $this->get(route('front.schedule.index', ['slug' => 'kyoto']))->assertOk();
+
+    expect(Theater::count())->toBe(1);
+});

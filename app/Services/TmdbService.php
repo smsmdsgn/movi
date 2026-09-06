@@ -26,6 +26,9 @@ class TmdbService
     /** 一覧・検索結果のサムネイル用の画像サイズ（TMDBの `t/p/{size}`）。 */
     public const string POSTER_SIZE_THUMBNAIL = 'w185';
 
+    /** 作品詳細（P-23、7.5-1）およびOGP画像（19.3-2）用の画像サイズ。 */
+    public const string POSTER_SIZE_DETAIL = 'w342';
+
     /**
      * `m_movies.poster_path` に保存を許すTMDBの相対パスの形式。
      * 保存時のバリデーション（A-05）とURL生成（`posterUrl()`）の双方から参照し、

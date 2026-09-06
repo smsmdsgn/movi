@@ -4,8 +4,11 @@ namespace App\Models;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Date;
 
 /**
  * @property int $id
@@ -26,6 +29,19 @@ class SeatLock extends Model
         return [
             'expires_at' => 'datetime',
         ];
+    }
+
+    /**
+     * 有効期限が未経過のロック（6.4.1）。残席の集計（7.4）が参照する。
+     * `SeatLockService`（13.4.6）実装時も同じ条件を本スコープに寄せること。
+     *
+     * @param  Builder<SeatLock>  $query
+     * @return Builder<SeatLock>
+     */
+    #[Scope]
+    protected function active(Builder $query, ?CarbonImmutable $now = null): Builder
+    {
+        return $query->where('expires_at', '>', $now ?? Date::now());
     }
 
     /**

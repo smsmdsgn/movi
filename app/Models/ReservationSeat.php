@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -31,6 +33,19 @@ class ReservationSeat extends Model
             'released_at' => 'datetime',
             'active_seat_id' => 'integer',
         ];
+    }
+
+    /**
+     * 座席を占有中の行（`released_at IS NULL`、6.4.2）。残席の集計（7.4）が参照する。
+     * `ReservationService`（13.4.7）実装時も同じ条件を本スコープに寄せること。
+     *
+     * @param  Builder<ReservationSeat>  $query
+     * @return Builder<ReservationSeat>
+     */
+    #[Scope]
+    protected function occupying(Builder $query): Builder
+    {
+        return $query->whereNull('released_at');
     }
 
     /**

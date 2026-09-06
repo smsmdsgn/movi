@@ -15,15 +15,27 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  * `admin` ガードで認証中の管理者を、自館のデータのみに絞り込む（13.4.1）。
  * 全館横断の参照可否は `CinemaPolicy::viewAllCinemas` に判定を委ねる（13.4.2）。
  *
- * `admin` ガードのセッションが残っていれば、顧客側ページ（front）を同一ブラウザで
- * 開いた場合にも適用される（4.8.6 追記表）。
+ * `admin` ガードのセッションが残っていても、顧客側（front）のルートでは適用しない。
+ * 顧客側のルートは `SkipCinemaScope` ミドルウェアが `SKIP_BINDING` をコンテナへ
+ * バインドして宣言する（4.2.3追記表「顧客側での `CinemaScope` の扱い」）。
+ * コンソール・Job 等のルートを持たない文脈ではバインドが無く、従来どおり
+ * `admin` ガードの認証状態のみで判定する。
  *
  * @implements Scope<Model>
  */
 class CinemaScope implements Scope
 {
+    /**
+     * 顧客側のリクエストであることを示すコンテナのキー。`SkipCinemaScope` が設定する。
+     */
+    public const string SKIP_BINDING = 'cinema-scope.skip';
+
     public function apply(Builder $builder, Model $model): void
     {
+        if (app()->bound(self::SKIP_BINDING)) {
+            return;
+        }
+
         $admin = Auth::guard('admin')->user();
 
         if (! $admin instanceof Admin) {

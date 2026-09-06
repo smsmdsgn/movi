@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Enums\AdminRole;
 use App\Http\Middleware\EnsureAdminIsActive;
+use App\Http\Middleware\SkipCinemaScope;
 use App\Models\Admin;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
@@ -37,6 +38,11 @@ class AppServiceProvider extends ServiceProvider
         // ルートに付いていたミドルウェアのうちこのリストにあるものだけを再適用する
         // ため、管理画面（routes/admin.php）以外へは波及しない。
         Livewire::addPersistentMiddleware(EnsureAdminIsActive::class);
+
+        // 顧客側ルートの「CinemaScope を適用しない」宣言（SkipCinemaScope）を、
+        // 上映スケジュール表の日付切替等の `/livewire/update` にも引き継ぐ。
+        // 元のリクエストが顧客側ルートだった場合にのみ再適用される。
+        Livewire::addPersistentMiddleware(SkipCinemaScope::class);
     }
 
     /**

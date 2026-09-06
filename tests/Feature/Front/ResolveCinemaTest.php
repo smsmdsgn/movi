@@ -1,6 +1,11 @@
 <?php
 
+use App\Http\Middleware\SkipCinemaScope;
+use App\Models\Booking;
 use App\Models\Cinema;
+use App\Models\Format;
+use App\Models\Movie;
+use App\Models\Theater;
 use Illuminate\Support\Facades\Route;
 
 it('routes/ で定義したルートのアクションにクロージャを使用しない', function () {
@@ -35,15 +40,53 @@ it('館別ページで {slug} の館を解決し、画面IDに対応するペー
         ->assertSee('data-testid="cinema-name">祇園ムビ<', false)
         ->assertSee($screenId);
 })->with([
-    'P-21 館トップ' => ['front.cinema.show', 'P-21', []],
-    'P-22 上映スケジュール' => ['front.schedule.index', 'P-22', []],
-    'P-23 作品詳細' => ['front.movie.show', 'P-23', ['id' => 1]],
     'P-24 お知らせ一覧' => ['front.news.index', 'P-24', []],
     'P-25 お知らせカテゴリー別' => ['front.news.category', 'P-25', ['category' => 'campaign']],
     'P-26 お知らせ詳細' => ['front.news.show', 'P-26', ['id' => 1]],
     'P-27 施設案内' => ['front.establishment.index', 'P-27', []],
     'P-28 アクセス' => ['front.access.index', 'P-28', []],
 ]);
+
+it('P-21〜P-23 は画面IDを表示せず、解決された館名（data-testid="cinema-name"）を表示する（工程4で実装）', function () {
+    createCinema('gion', '祇園ムビ');
+
+    $this->get(route('front.cinema.show', ['slug' => 'gion']))
+        ->assertOk()
+        ->assertSee('data-testid="cinema-name">祇園ムビ<', false);
+});
+
+it('P-22 上映スケジュールが解決された館名を表示する', function () {
+    createCinema('gion', '祇園ムビ');
+
+    $this->get(route('front.schedule.index', ['slug' => 'gion']))
+        ->assertOk()
+        ->assertSee('data-testid="cinema-name">祇園ムビ<', false);
+});
+
+it('P-23 作品詳細が解決された館名を表示する', function () {
+    $cinema = createCinema('gion', '祇園ムビ');
+    $theater = Theater::create(['cinema_id' => $cinema->id, 'number' => 1, 'name' => '1番シアター']);
+    $format = Format::firstOrCreate(['name' => '2D'], ['default_surcharge' => 0]);
+    $movie = Movie::create([
+        'tmdb_id' => random_int(1, 899_999_999),
+        'title' => 'テスト作品',
+        'synopsis' => 'あらすじ',
+        'runtime_minutes' => 100,
+        'released_on' => now()->subYear(),
+    ]);
+    Booking::create([
+        'cinema_id' => $cinema->id,
+        'movie_id' => $movie->id,
+        'format_id' => $format->id,
+        'starts_on' => now()->subDays(5),
+        'ends_on' => now()->addDays(5),
+        'surcharge' => 0,
+    ]);
+
+    $this->get(route('front.movie.show', ['slug' => 'gion', 'id' => $movie->id]))
+        ->assertOk()
+        ->assertSee('data-testid="cinema-name">祇園ムビ<', false);
+});
 
 it('存在しない slug では404を返す', function () {
     createCinema('gion', '祇園ムビ');
@@ -86,4 +129,19 @@ it('解決した館をコンテナ経由でコントローラへ引き渡す', f
     $this->get(route('front.cinema.show', ['slug' => 'gion']))
         ->assertOk()
         ->assertViewHas('cinema', fn (Cinema $rendered) => $rendered->is($cinema));
+});
+
+it('顧客向けルート（front.*）にはすべて SkipCinemaScope が付いている（13.4.1）', function () {
+    /*
+     * 管理者のセッションが残ったブラウザで顧客側の館スコープが効いてしまう不具合
+     * （4.2.3追記表）は、ルートをグループの外に書いた時点で再発する。
+     * routes/web.php に追加した顧客向けルートが漏れなくグループ内にあることを固定する。
+     */
+    $missing = collect(Route::getRoutes()->getRoutes())
+        ->filter(fn ($route) => str_starts_with((string) $route->getName(), 'front.'))
+        ->reject(fn ($route) => in_array(SkipCinemaScope::class, $route->gatherMiddleware(), true))
+        ->map(fn ($route) => $route->getName())
+        ->values();
+
+    expect($missing)->toBeEmpty();
 });

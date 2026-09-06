@@ -8,6 +8,9 @@ allowed-tools: Read, Grep, Glob
 
 - 顧客側は `ResolveCinema` ミドルウェアで解決した館を使用する。再取得しない
 - 管理画面は `CinemaScope` により自動で絞り込まれる
+- 顧客向けのルートは `routes/web.php` の `SkipCinemaScope` グループの内側に置く。
+  管理者のセッションが残ったブラウザでも `CinemaScope` が顧客側を絞り込まないようにするため。
+  顧客側の館の絞り込みは解決済みの館を条件にサービスが明示的に行う
 - 画面ごとに権限判定の条件式を記述しない
 - `withoutGlobalScope()` を使用しない
 - 館切替時は同種のページへ遷移させる
