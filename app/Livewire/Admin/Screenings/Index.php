@@ -173,8 +173,23 @@ class Index extends Component
                 return ['theater_id', 'admin.screening.errors.theater_not_found'];
             }
 
+            // 更新の場合は対象の上映回行も掴む。顧客側の `SeatLockService::acquire()` が
+            // 同じ行を掴んでから書き込むため、下の座席ロックの確認と更新の間に
+            // 割り込まれない（4.3.8）。取得順は 編成 → シアター → 上映回 で固定する。
+            if ($screening !== null && Screening::whereKey($screening->id)->lockForUpdate()->first() === null) {
+                return ['starts_at', 'admin.screening.errors.not_found'];
+            }
+
             if ($screening !== null && $screening->reservations()->exists()) {
                 return ['starts_at', 'admin.screening.errors.locked_by_reservations'];
+            }
+
+            if ($screening !== null && SeatLock::where('screening_id', $screening->id)->active()->exists()) {
+                // 削除（6.2 制約1）と同じ理由で編集も止める。決済中（`pending`）の座席は
+                // `t_reservation_seats` をまだ持たないため予約の確認では検出できず、
+                // シアターや開始時刻を変えると顧客の保持ロックが「別シアターの座席」
+                // 「販売期間外の回」となり、13.4.7 の検証で決済確定が失敗する（返金経路）。
+                return ['starts_at', 'admin.screening.errors.locked_by_seat_locks'];
             }
 
             $startsAt = $this->parseDateTime($data['starts_at']);
@@ -243,7 +258,19 @@ class Index extends Component
             Booking::whereKey($screening->booking_id)->lockForUpdate()->first();
             Theater::whereKey($screening->theater_id)->lockForUpdate()->first();
 
-            if ($screening->starts_at->isPast()) {
+            // 顧客側の座席ロック取得（`SeatLockService::acquire()`）は上映回行を掴んでから
+            // 書き込むため、同じ行を掴むことで「ロックが無いことの確認 → 削除」の間に
+            // 割り込まれない（4.3.8。`t_seat_locks.screening_id` は cascadeOnDelete であり、
+            // 割り込まれると決済中の顧客のロックが無言で消える）。
+            $current = Screening::whereKey($screening->id)->lockForUpdate()->first();
+
+            if ($current === null) {
+                return 'admin.screening.errors.not_found';
+            }
+
+            // 以降の判定は読み直した行で行う。一覧の表示時点から開始時刻が変わっていると、
+            // 開始済みの回を削除する／未来の回の削除を拒む、のいずれにも振れる。
+            if ($current->starts_at->isPast()) {
                 // 6.2「上映編成・上映回は上映期間終了後も保持」。削除は登録の誤りを
                 // 正すための操作であり、上映実績を消す手段ではない。A-04 が 6.2 制約2
                 // を未来の上映回に限って判定しているのと同じ切り分け（4.8.6追記表）。
@@ -256,7 +283,7 @@ class Index extends Component
                 return 'admin.screening.errors.locked_by_reservations';
             }
 
-            if (SeatLock::where('screening_id', $screening->id)->where('expires_at', '>', Date::now())->exists()) {
+            if (SeatLock::where('screening_id', $screening->id)->active()->exists()) {
                 // 決済中（`pending`）の座席は `t_reservation_seats` をまだ持たない
                 // （6.4.2）。`t_seat_locks.screening_id` は `cascadeOnDelete` であり、
                 // ここで止めなければ顧客のロックが無言で消える（4.8.6追記表）。

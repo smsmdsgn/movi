@@ -11,6 +11,13 @@
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
         </testsuite>
+        <!--
+            複数コネクションの同時実行を検証するスイート（13.6 T-01）。
+            DatabaseTruncation を用いるため Feature とは分離する（tests/Pest.php）。
+        -->
+        <testsuite name="Concurrency">
+            <directory>tests/Concurrency</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>

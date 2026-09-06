@@ -27,6 +27,10 @@ class SeatLock extends Model
     protected function casts(): array
     {
         return [
+            // 保持座席の判定（`SeatLockService::withinHolderLimit()`）が厳密比較を行うため、
+            // PDO の返す型に依存しないよう明示的にキャストする。
+            'screening_id' => 'integer',
+            'seat_id' => 'integer',
             'expires_at' => 'datetime',
         ];
     }

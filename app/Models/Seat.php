@@ -29,6 +29,9 @@ class Seat extends Model
     protected function casts(): array
     {
         return [
+            // `SeatLockService::acquire()` が上映回のシアターと厳密比較するため、
+            // PDO の返す型に依存しないよう明示的にキャストする。
+            'theater_id' => 'integer',
             'grid_row' => 'integer',
             'grid_col' => 'integer',
             'is_available' => 'boolean',

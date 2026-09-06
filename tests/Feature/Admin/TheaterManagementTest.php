@@ -199,6 +199,40 @@ it('未期限切れの座席ロックがある座席は使用不可にできな�
     expect($seat->fresh()->is_available)->toBeTrue();
 });
 
+it('期限切れの座席ロックは使用不可への切替を妨げない（SeatLock::active() の境界）', function () {
+    [$screening, $seat] = createScreeningWithSeat();
+    SeatLock::create([
+        'screening_id' => $screening->id,
+        'seat_id' => $seat->id,
+        'holder_key' => 'test-holder',
+        'expires_at' => now()->subMinute(),
+    ]);
+    $theater = $seat->theater;
+    $this->actingAs(createAdmin(), 'admin');
+
+    Livewire::test(Index::class)
+        ->call('manageSeats', $theater->id)
+        ->call('toggleSeat', $seat->id);
+
+    expect($seat->fresh()->is_available)->toBeFalse();
+});
+
+it('解放済み（キャンセル済み）の予約座席は使用不可への切替を妨げない（ReservationSeat::occupying() の境界）', function () {
+    [$screening, $seat] = createScreeningWithSeat();
+    $reservationSeat = createReservationSeat($screening->id, $seat->id, createTicketType()->id);
+    $reservationSeat->released_at = now();
+    $reservationSeat->save();
+
+    $theater = $seat->theater;
+    $this->actingAs(createAdmin(), 'admin');
+
+    Livewire::test(Index::class)
+        ->call('manageSeats', $theater->id)
+        ->call('toggleSeat', $seat->id);
+
+    expect($seat->fresh()->is_available)->toBeFalse();
+});
+
 it('過去の上映回の予約は使用不可への切替を妨げない（6.2）', function () {
     $theater = createTheater();
     $seatType = SeatType::create(['name' => '一般', 'surcharge' => 0, 'display_class' => SeatDisplayClass::Standard]);

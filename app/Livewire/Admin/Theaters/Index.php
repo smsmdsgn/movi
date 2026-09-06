@@ -13,6 +13,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Locked;
@@ -118,6 +119,12 @@ class Index extends Component
     /**
      * 座席の有効／無効を切り替える（4.8.2）。使用不可への切替のみ、
      * 未来の上映回に有効な予約または未期限切れの座席ロックが無いことを検証する（6.2 制約2）。
+     *
+     * 判定と更新は、対象の座席行を `lockForUpdate()` した同一トランザクションの内側で行う。
+     * `SeatLockService::acquire()`（13.4.6）も座席行を同じく掴んでから書き込むため、
+     * 「ロックが無いことを確認 → 無効化」の間に顧客のロック取得が割り込む経路を塞ぐ
+     * （4.3.8）。座席行より後に他の行を掴まないため、`acquire()` の取得順
+     * （上映回 → 座席）と逆順にならない。
      */
     public function toggleSeat(int $seatId): void
     {
@@ -131,19 +138,32 @@ class Index extends Component
 
         Gate::forUser($admin)->authorize('toggleSeats', $theater);
 
-        if ($seat->is_available && $this->hasBlockingReservationOrLock($seat)) {
+        $blocked = DB::transaction(function () use ($seat): bool {
+            $target = Seat::whereKey($seat->id)->lockForUpdate()->first();
+
+            if ($target === null) {
+                return true;
+            }
+
+            // 座席行のロック取得後に読むため、直前に確定した予約・ロックも見落とさない。
+            if ($target->is_available && $this->hasBlockingReservationOrLock($target)) {
+                return true;
+            }
+
+            $target->update(['is_available' => ! $target->is_available]);
+
+            return false;
+        });
+
+        if ($blocked) {
             Flux::toast(text: __('admin.theater.messages.seat_blocked'), variant: 'danger');
-
-            return;
         }
-
-        $seat->update(['is_available' => ! $seat->is_available]);
     }
 
     private function hasBlockingReservationOrLock(Seat $seat): bool
     {
         $hasActiveFutureReservation = ReservationSeat::where('seat_id', $seat->id)
-            ->whereNull('released_at')
+            ->occupying()
             ->whereHas('screening', fn ($query) => $query->where('starts_at', '>', Date::now()))
             ->exists();
 
@@ -151,9 +171,7 @@ class Index extends Component
             return true;
         }
 
-        return SeatLock::where('seat_id', $seat->id)
-            ->where('expires_at', '>', Date::now())
-            ->exists();
+        return SeatLock::where('seat_id', $seat->id)->active()->exists();
     }
 
     /**

@@ -33,9 +33,6 @@ class ScheduleService
     /** 日付タブで切り替えられる日数（4.2.2-1）。当日を含む。 */
     public const int DISPLAY_DAYS = 7;
 
-    /** 販売開始は上映日の何日前の 0:00 か（4.2.2-5 / 4.3.1）。 */
-    public const int SALES_START_DAYS_BEFORE = 3;
-
     /**
      * 日付タブに並べる日付（当日から `DISPLAY_DAYS` 日分）。
      *
@@ -220,11 +217,10 @@ class ScheduleService
 
     /**
      * 販売開始（上映日の3日前 0:00、4.2.2-5）に達していないか。
+     * 販売期間の規則は `Screening` が持つ（`SeatLockService` と共有するため）。
      */
     public function isBeforeSale(Screening $screening, ?CarbonImmutable $now = null): bool
     {
-        $now ??= Date::now();
-
-        return $screening->starts_at->startOfDay()->subDays(self::SALES_START_DAYS_BEFORE)->isAfter($now);
+        return $screening->isBeforeSale($now);
     }
 }

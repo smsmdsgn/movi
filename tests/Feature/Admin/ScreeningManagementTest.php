@@ -473,6 +473,83 @@ it('予約が存在する上映回は削除できない（6.2 制約1）', funct
     expect(Screening::whereKey($screening->id)->exists())->toBeTrue();
 });
 
+it('期限切れの座席ロックだけの上映回は削除できる（SeatLock::active() の境界）', function () {
+    $fixture = makeScreeningFixture();
+
+    $screening = Screening::create([
+        'booking_id' => $fixture['booking']->id,
+        'theater_id' => $fixture['theater']->id,
+        'starts_at' => now()->addDay(),
+        'ends_at' => now()->addDay()->addHours(2),
+    ]);
+
+    $seatType = SeatType::create([
+        'name' => '一般',
+        'surcharge' => 0,
+        'display_class' => SeatDisplayClass::Standard,
+    ]);
+    $seat = Seat::create([
+        'theater_id' => $fixture['theater']->id,
+        'seat_type_id' => $seatType->id,
+        'row_label' => 'A',
+        'seat_number' => '01',
+        'grid_row' => 1,
+        'grid_col' => 1,
+    ]);
+    SeatLock::create([
+        'screening_id' => $screening->id,
+        'seat_id' => $seat->id,
+        'holder_key' => 'session:test',
+        'expires_at' => now()->subMinute(),
+    ]);
+
+    Livewire::actingAs(createAdmin(), 'admin')
+        ->test(Index::class)
+        ->call('deleteScreening', $screening->id);
+
+    expect(Screening::whereKey($screening->id)->exists())->toBeFalse();
+});
+
+it('有効期限内の座席ロックがある上映回は編集できない（4.3.8）', function () {
+    $fixture = makeScreeningFixture();
+
+    $screening = Screening::create([
+        'booking_id' => $fixture['booking']->id,
+        'theater_id' => $fixture['theater']->id,
+        'starts_at' => now()->addDay()->setTime(10, 0),
+        'ends_at' => now()->addDay()->setTime(12, 0),
+    ]);
+
+    $seatType = SeatType::create([
+        'name' => '一般',
+        'surcharge' => 0,
+        'display_class' => SeatDisplayClass::Standard,
+    ]);
+    $seat = Seat::create([
+        'theater_id' => $fixture['theater']->id,
+        'seat_type_id' => $seatType->id,
+        'row_label' => 'A',
+        'seat_number' => '01',
+        'grid_row' => 1,
+        'grid_col' => 1,
+    ]);
+    SeatLock::create([
+        'screening_id' => $screening->id,
+        'seat_id' => $seat->id,
+        'holder_key' => 'session:test',
+        'expires_at' => now()->addMinutes(10),
+    ]);
+
+    Livewire::actingAs(createAdmin(), 'admin')
+        ->test(Index::class)
+        ->call('editScreening', $screening->id)
+        ->set('starts_at', now()->addDay()->setTime(18, 0)->format('Y-m-d\TH:i'))
+        ->call('save')
+        ->assertHasErrors('starts_at');
+
+    expect($screening->fresh()->starts_at->format('H:i'))->toBe('10:00');
+});
+
 it('有効期限内の座席ロックがある上映回は削除できない（6.4.2 / 4.8.6追記表）', function () {
     $fixture = makeScreeningFixture();
 

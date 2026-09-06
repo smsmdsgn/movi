@@ -19,6 +19,7 @@ use App\Models\Theater;
 use App\Models\TicketType;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -37,6 +38,25 @@ use Tests\TestCase;
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->in('Feature');
+
+/*
+ * tests/Concurrency は複数のコネクション（子プロセス）から同一のデータを操作するため、
+ * テストをトランザクションで包む RefreshDatabase を使えない（13.6「実行環境」）。
+ * 用意したデータを子プロセスから見えるようにするため DatabaseTruncation を用いる。
+ */
+pest()->extend(TestCase::class)
+    ->use(DatabaseTruncation::class)
+    ->in('Concurrency');
+
+/*
+ * DatabaseTruncation はデータをコミットして残すため、後続の Feature テスト
+ * （RefreshDatabase）のうち空のデータベースを前提にしているものが実行順によって落ちる。
+ * 落ちるのは無関係なテストであり原因の切り分けに時間を要するため、ディレクトリ全体に
+ * 後始末を掛ける（テストファイル単位にすると、追加時の書き漏れで再発する）。
+ */
+pest()->afterEach(function () {
+    $this->truncateTablesForAllConnections();
+})->in('Concurrency');
 
 /*
 |--------------------------------------------------------------------------
