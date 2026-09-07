@@ -6,6 +6,7 @@ use App\Http\Controllers\Front\MovieController;
 use App\Http\Controllers\Front\PagePlaceholderController;
 use App\Http\Controllers\Front\PlaceholderController;
 use App\Http\Controllers\Front\ScheduleController;
+use App\Http\Controllers\Front\SeatSelectionController;
 use App\Http\Middleware\SkipCinemaScope;
 use App\Models\Cinema;
 use Illuminate\Support\Facades\Route;
@@ -43,8 +44,9 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
     |
     | P-05・P-06（マイページ）は会員専用画面（7.14）のため `auth` を付与する。
     |
-    | P-31（座席選択）は工程5（座席予約フロー）で実装する。上映スケジュール表（7.4）の
-    | 上映回ボタンの遷移先として必要なため、ルート骨格のみを先行して置く。
+    | 予約フロー（P-31〜P-38）のうち、P-31（座席選択）は工程5-bで実装済み。
+    | P-32（同意画面）は P-31 の「次へ進む」の遷移先として必要なため、ルート骨格のみを
+    | 先行して置く（P-33以降も同じ扱いで、それぞれの実装時に差し替える）。
     |
     */
     Route::get('/', ChainTopController::class)->name('front.home');
@@ -68,7 +70,8 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
         Route::get('cookie-policy', PagePlaceholderController::class)->defaults('screenId', 'P-18')->name('cookie-policy.index');
         Route::get('legal', PagePlaceholderController::class)->defaults('screenId', 'P-19')->name('legal.index');
         Route::get('sitemap', PagePlaceholderController::class)->defaults('screenId', 'P-20')->name('sitemap.index');
-        Route::get('screenings/{id}/seats', PagePlaceholderController::class)->defaults('screenId', 'P-31')->name('reservation.seats')->whereNumber('id');
+        Route::get('screenings/{id}/seats', SeatSelectionController::class)->name('reservation.seats')->whereNumber('id');
+        Route::get('screenings/{id}/agreement', PagePlaceholderController::class)->defaults('screenId', 'P-32')->name('reservation.agreement')->whereNumber('id');
     });
 
     /*

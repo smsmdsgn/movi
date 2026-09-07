@@ -7,6 +7,8 @@
     - canonical: 正規URL。省略時は現在のURL
     - ogImage: OGP画像。作品のポスター等。サイト共通の画像は未用意（12章 残課題）
     - ogType: `website`（既定）または `article` 等
+    - robots: `noindex` 等のクロール制御。予約フロー（P-31〜P-37）は上映回IDに依存し、
+      時間の経過とともに存在しなくなるため除外する（19.3-6。`robots.txt` は未実装）
     - jsonLd: JSON-LD の配列（`MovieTheater` / `Movie` / `BreadcrumbList`、19.3-4・9）。
       `application/ld+json` はスクリプトとして実行されないため CSP（17.7）の script-src の対象外
 --}}
@@ -16,6 +18,7 @@
     'canonical' => null,
     'ogImage' => null,
     'ogType' => 'website',
+    'robots' => null,
     'jsonLd' => [],
 ])
 @php
@@ -31,6 +34,9 @@
     <title>{{ $pageTitle }}</title>
     <meta name="description" content="{{ $pageDescription }}">
     <link rel="canonical" href="{{ $canonicalUrl }}">
+    @if ($robots)
+        <meta name="robots" content="{{ $robots }}">
+    @endif
 
     <meta property="og:site_name" content="{{ __('front.meta.site_name') }}">
     <meta property="og:type" content="{{ $ogType }}">

@@ -8,8 +8,10 @@ use App\Models\Seat;
 use App\Models\SeatLock;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Session;
 
 /**
  * 座席の一時ロック（6.4.1）の取得・延長・解放・移譲を集約する（13.4.6）。
@@ -38,6 +40,20 @@ class SeatLockService
 
     /** 1利用者が1上映回で保持できる座席数の上限（4.3.4 / 17.8-2）。 */
     public const int MAX_SEATS_PER_HOLDER = 8;
+
+    /**
+     * 現在の利用者の保持者キー（13.3）。会員は `user:{id}`、非会員は `session:{id}`。
+     *
+     * 形式の組み立てを画面側に書かせないため本サービスが持つ（13.4.6 の趣旨。4.3.9）。
+     * ログイン・会員登録の完了でセッションIDが再生成されると値が変わるため、
+     * その時点で `transfer()` によりロックの保持者を移す（P-33、7.8）。
+     */
+    public function holderKey(): string
+    {
+        $id = Auth::id();
+
+        return $id !== null ? 'user:'.$id : 'session:'.Session::getId();
+    }
 
     /**
      * 座席のロックを取得する。取得できた場合のみ true を返す。

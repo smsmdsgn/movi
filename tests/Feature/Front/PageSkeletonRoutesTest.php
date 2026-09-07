@@ -23,7 +23,17 @@ it('館非依存ページ（7.1.1 P-07〜P-20）のルートが画面IDを返す
     'P-18 Cookieポリシー' => ['front.cookie-policy.index', 'P-18', []],
     'P-19 特定商取引法に基づく表記' => ['front.legal.index', 'P-19', []],
     'P-20 サイトマップ' => ['front.sitemap.index', 'P-20', []],
-    'P-31 座席選択' => ['front.reservation.seats', 'P-31', ['id' => 1]],
+]);
+
+it('予約フロー（7.1.1 P-32以降）のルートが画面IDを返し、クロール対象外となる（19.3-6 / 4.3.9）', function (string $routeName, string $screenId, array $parameters) {
+    createCinema('gion', '祇園ムビ');
+
+    $this->get(route($routeName, $parameters))
+        ->assertOk()
+        ->assertSee($screenId)
+        ->assertSee('name="robots" content="noindex, nofollow"', escape: false);
+})->with([
+    'P-32 同意画面' => ['front.reservation.agreement', 'P-32', ['id' => 1]],
 ]);
 
 it('館非依存ページ（7.1.1 P-05, P-06）は会員専用のため未ログインでは401ではなくログイン画面へ遷移する', function (string $routeName, array $parameters) {

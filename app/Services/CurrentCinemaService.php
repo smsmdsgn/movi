@@ -46,4 +46,26 @@ class CurrentCinemaService
 
         return $cinema;
     }
+
+    /**
+     * URL に `{slug}` を持たないが、対象の館がデータから定まるページ（予約フロー
+     * P-31〜P-37 など）で「現在の館」を確定させる（4.3.9）。`ResolveCinema` と同じく、
+     * コンテナへのバインドとセッション・Cookie への保持を行う（4.1.3-1）。
+     *
+     * これを呼ばない場合、ヘッダー・パンくずには前回選択した館が表示され、
+     * 実際に予約しようとしている館と食い違う。
+     */
+    public function remember(Request $request, Cinema $cinema): Cinema
+    {
+        app()->instance(Cinema::class, $cinema);
+
+        // 変化が無ければ書かない（`resolve()` と対称にする）。毎回書くと、10秒ごとに
+        // 再描画される画面でも応答のたびに Set-Cookie が付く。
+        if ($request->session()->get(Cinema::SESSION_KEY) !== $cinema->slug) {
+            $request->session()->put(Cinema::SESSION_KEY, $cinema->slug);
+            Cookie::queue(Cinema::SESSION_KEY, $cinema->slug, 60 * 24 * 365);
+        }
+
+        return $cinema;
+    }
 }
