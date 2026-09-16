@@ -3,8 +3,10 @@
 
     render() から渡る変数:
     - $onSale: 販売期間内の上映回が存在するか（4.3.1 / 4.3.10）
-    - $hasSeats: 座席を保持しているか。保持していなければ選択肢を出さない
+    - $canProceed: 先へ進める前提（販売期間・座席の保持・利用規約への同意）が揃っているか
     - $noticeKey: 表示する案内の文言キー（7.17）。無い場合は null
+    - $recoveryUrl / $recoveryLabelKey: 前提を満たしていない場合の復帰先（4.3.12）。
+      販売できない回では両方 null（往復させないため導線を出さない）
     - $seatsUrl: 座席選択（P-31）のURL
 
     ライブリージョンはルート直下に常設し、中身だけを差し替える（P-32 と同じ扱い。4.3.10）。
@@ -23,13 +25,16 @@
         @endif
     </div>
 
-    @if ($onSale && ! $hasSeats)
-        <p>
-            <a href="{{ $seatsUrl }}" class="inline-block border border-stone-400 px-4 py-2 text-sm underline decoration-stone-400 hover:bg-stone-100">
-                {{ __('front.reservation.back_to_seats') }}
-            </a>
-        </p>
-    @elseif ($onSale)
+    @if (! $canProceed)
+        {{-- 前提を満たしていない場合は選択肢を出さず、復帰先だけを残す（4.3.12）。 --}}
+        @if ($recoveryUrl !== null)
+            <p>
+                <a href="{{ $recoveryUrl }}" class="inline-block border border-stone-400 px-4 py-2 text-sm underline decoration-stone-400 hover:bg-stone-100">
+                    {{ __($recoveryLabelKey) }}
+                </a>
+            </p>
+        @endif
+    @else
         <div class="grid gap-4 md:grid-cols-2">
             {{-- 7.8-1 会員としてログイン --}}
             <section aria-labelledby="member-heading" class="flex flex-col border border-stone-300 p-4">

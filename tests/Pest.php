@@ -18,6 +18,7 @@ use App\Models\SeatType;
 use App\Models\Theater;
 use App\Models\TicketType;
 use App\Models\User;
+use App\Services\ReservationDraft;
 use App\Services\SeatLockService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
@@ -488,4 +489,33 @@ function holdSeatsForScreening(Screening $screening, ?string $holderKey, Seat ..
         expect($locks->acquire($screening, $seat, $holderKey))
             ->toBeTrue("座席 {$seat->id} のロックを取得できませんでした。");
     }
+}
+
+/*
+ * 利用規約への同意（P-32、4.3.7-7）を済ませた状態にする。P-33 以降は同意が無いと
+ * 先へ進めない（4.3.12、旧12章 残課題25）ため、その段階を検証するテストの前提になる。
+ */
+function agreeToTerms(Screening $screening): void
+{
+    app(ReservationDraft::class)->agree($screening);
+}
+
+/*
+ * HTTP テスト用。`$this->get()` はテストプロセスとは別のセッションで動くため、
+ * `withSession()` へ渡す形で同意済みの状態を組み立てる。
+ *
+ * セッションの構造を直接書かず `ReservationDraft` に作らせる。構造が変わっても
+ * テスト側の修正が要らないようにするため。
+ *
+ * **副作用**: 組み立てのために `agreeToTerms()` を呼ぶため、テストプロセス側の
+ * セッションにも同意が書かれる。同一のテストで「未同意」を前提とする
+ * `Livewire::test()` と併用しないこと。
+ *
+ * @return array<string, mixed>
+ */
+function agreedDraftSession(Screening $screening): array
+{
+    agreeToTerms($screening);
+
+    return ['reservation' => session('reservation')];
 }

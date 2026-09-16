@@ -16,6 +16,7 @@ use Livewire\Livewire;
 it('会員・非会員の選択肢と会員特典の説明を表示する（7.8）', function () {
     ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
     holdSeatsForScreening($screening, null, $seats[0]);
+    agreeToTerms($screening);
 
     Livewire::test(Identify::class, ['screening' => $screening])
         ->assertSee(__('front.reservation.identify.member.heading'))
@@ -50,6 +51,7 @@ it('存在しない上映回は404を返す', function () {
 it('ログインの導線は戻り先を保持してログイン画面へ送る（7.8-1）', function () {
     ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
     holdSeatsForScreening($screening, null, $seats[0]);
+    agreeToTerms($screening);
 
     Livewire::test(Identify::class, ['screening' => $screening])
         ->call('login')
@@ -63,6 +65,7 @@ it('ログインの導線は戻り先を保持してログイン画面へ送る�
 it('非会員の導線はお客様情報の入力（P-34）へ送る（7.8-3）', function () {
     ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
     holdSeatsForScreening($screening, null, $seats[0]);
+    agreeToTerms($screening);
 
     Livewire::test(Identify::class, ['screening' => $screening])
         ->call('continueAsGuest')
@@ -73,6 +76,7 @@ it('ログイン済みの会員は券種選択（P-35）へ前送りする（7.1
     ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
     $user = User::factory()->create();
     holdSeatsForScreening($screening, 'user:'.$user->id, $seats[0]);
+    agreeToTerms($screening);
 
     Livewire::actingAs($user)
         ->test(Identify::class, ['screening' => $screening])
@@ -87,6 +91,36 @@ it('ログイン済みでも座席を保持していなければ前送りしな�
         ->test(Identify::class, ['screening' => $screening])
         ->assertNoRedirect()
         ->assertSee(__('front.reservation.errors.lock_expired'));
+});
+
+it('同意画面（P-32）を経ていない場合は選択肢を出さず、同意画面へ戻す導線を出す（4.3.12）', function () {
+    ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
+    holdSeatsForScreening($screening, null, $seats[0]);
+
+    // 座席は保持しているが `agreeToTerms()` を呼んでいない = URLへの直接到達。
+    Livewire::test(Identify::class, ['screening' => $screening])
+        ->assertSee(__('front.reservation.errors.agreement_required'))
+        ->assertDontSee(__('front.reservation.identify.member.action'))
+        ->assertDontSee(__('front.reservation.identify.guest.action'))
+        // 復帰先は P-31 ではなく P-32。座席を選び直させない（4.3.12）。
+        ->assertSee(route('front.reservation.agreement', ['id' => $screening->id]))
+        ->call('continueAsGuest')
+        ->assertNoRedirect()
+        ->call('login')
+        ->assertNoRedirect();
+});
+
+it('別の上映回で得た同意はこの回に持ち越さない（4.3.12）', function () {
+    ['screening' => $screening, 'seats' => $seats, 'theater' => $theater] = makeReservationFixture();
+    holdSeatsForScreening($screening, null, $seats[0]);
+
+    $other = createScreeningForTheater($theater);
+    agreeToTerms($other);
+
+    Livewire::test(Identify::class, ['screening' => $screening])
+        ->assertSee(__('front.reservation.errors.agreement_required'))
+        ->call('continueAsGuest')
+        ->assertNoRedirect();
 });
 
 it('座席を保持していない場合は選択肢を出さず、座席選択へ戻す導線を出す（4.3.10）', function () {
@@ -129,6 +163,7 @@ it('別の上映回の座席を保持している場合は期限切れではな�
 it('販売期間外の上映回では選択肢を出さず、7.17 の文言のみを表示する（4.3.1）', function () {
     ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
     holdSeatsForScreening($screening, null, $seats[0]);
+    agreeToTerms($screening);
 
     $screening->update([
         'starts_at' => CarbonImmutable::now()->subHour(),
@@ -162,6 +197,7 @@ it('ログイン済みの会員は HTTP のフルページでも券種選択へ�
     // Livewire::test() は mount() の redirect を直接観測するだけで、フルページの経路
     // （初回描画の dehydrate による abort(redirect())）を通らないため、実経路を固定する。
     $this->actingAs($user)
+        ->withSession(agreedDraftSession($screening))
         ->get(route('front.reservation.identify', ['id' => $screening->id]))
         ->assertRedirect(route('front.reservation.tickets', ['id' => $screening->id]));
 });

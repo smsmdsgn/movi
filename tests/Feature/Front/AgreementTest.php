@@ -3,6 +3,7 @@
 use App\Livewire\Front\Reservation\Agreement;
 use App\Models\SeatLock;
 use App\Models\User;
+use App\Services\ReservationDraft;
 use App\Services\SeatLockService;
 use Carbon\CarbonImmutable;
 use Livewire\Livewire;
@@ -116,6 +117,20 @@ it('同意して次へ進むと会員／非会員の選択（P-33）へ遷移す
         ->set('agreed', true)
         ->call('proceed')
         ->assertRedirect(route('front.reservation.identify', ['id' => $screening->id]));
+
+    // 同意は後続の画面（P-33・P-34）が読める形で残す（4.3.12、旧12章 残課題25）。
+    expect(app(ReservationDraft::class)->hasAgreed($screening->id))->toBeTrue();
+});
+
+it('同意せずに次へ進もうとした場合は同意を記録しない（4.3.12）', function () {
+    ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
+    holdSeatsForScreening($screening, null, $seats[0]);
+
+    Livewire::test(Agreement::class, ['screening' => $screening])
+        ->call('proceed')
+        ->assertNoRedirect();
+
+    expect(app(ReservationDraft::class)->hasAgreed($screening->id))->toBeFalse();
 });
 
 it('販売期間外の上映回では同意を求めず、7.17 の文言のみを表示する（4.3.1）', function () {

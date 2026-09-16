@@ -8,6 +8,7 @@ use App\Models\Cinema;
 use App\Models\Reservation;
 use App\Models\Screening;
 use App\Models\User;
+use App\Rules\FullWidthKatakana;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -109,7 +110,8 @@ class Index extends Component
                 // 4.3.5: 8桁の数字。ハイフンの有無を問わず受け付ける。
                 'reservation_no' => ['regex:/\A\d{4}-?\d{4}\z/'],
                 // 4.3.6: フリガナは全角カタカナのみ。索引を効かせるため前方一致で使う。
-                'kana' => ['regex:/\A[ァ-ヶー　 ]+\z/u', 'min:'.self::KANA_MIN_LENGTH],
+                // 文字集合は登録側（P-34・P-02）と同じ定義を使う（旧12章 残課題19）。
+                'kana' => [new FullWidthKatakana('admin.reservation_search.errors.kana_only'), 'min:'.self::KANA_MIN_LENGTH],
                 // 4.3.6: 電話番号はハイフンなしの半角数字。
                 'phone' => ['regex:/\A[0-9]+\z/'],
                 default => [],
@@ -123,9 +125,9 @@ class Index extends Component
     protected function messages(): array
     {
         return [
+            // フリガナは `FullWidthKatakana` が自ら文言キーを持つため、ここには現れない。
             'term.regex' => match ($this->searchBy) {
                 'reservation_no' => __('admin.reservation_search.errors.reservation_no_digits'),
-                'kana' => __('admin.reservation_search.errors.kana_only'),
                 'phone' => __('admin.reservation_search.errors.phone_digits'),
                 default => __('validation.regex', ['attribute' => __('admin.reservation_search.fields.term')]),
             },

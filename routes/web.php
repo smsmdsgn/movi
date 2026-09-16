@@ -3,6 +3,7 @@
 use App\Http\Controllers\Front\AgreementController;
 use App\Http\Controllers\Front\ChainTopController;
 use App\Http\Controllers\Front\CinemaTopController;
+use App\Http\Controllers\Front\CustomerInfoController;
 use App\Http\Controllers\Front\IdentifyController;
 use App\Http\Controllers\Front\MovieController;
 use App\Http\Controllers\Front\PagePlaceholderController;
@@ -47,9 +48,9 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
     | P-05・P-06（マイページ）は会員専用画面（7.14）のため `auth` を付与する。
     |
     | 予約フロー（P-31〜P-38）のうち、P-31（座席選択）は工程5-bで、P-32（同意画面）は
-    | 工程5-cで、P-33（会員／非会員の選択）は工程5-dで実装済み。P-34（お客様情報の入力）と
-    | P-35（券種選択）は P-33 の2つの遷移先として必要なため、ルート骨格のみを先行して置く
-    |（P-36以降も同じ扱いで、それぞれの実装時に差し替える）。
+    | 工程5-cで、P-33（会員／非会員の選択）は工程5-dで、P-34（お客様情報の入力）は
+    | 工程5-eで実装済み。P-35（券種選択）は P-33・P-34 の合流先として必要なため、
+    | ルート骨格のみを先行して置く（P-36以降も同じ扱いで、それぞれの実装時に差し替える）。
     |
     */
     Route::get('/', ChainTopController::class)->name('front.home');
@@ -76,7 +77,7 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
         Route::get('screenings/{id}/seats', SeatSelectionController::class)->name('reservation.seats')->whereNumber('id');
         Route::get('screenings/{id}/agreement', AgreementController::class)->name('reservation.agreement')->whereNumber('id');
         Route::get('screenings/{id}/identify', IdentifyController::class)->name('reservation.identify')->whereNumber('id');
-        Route::get('screenings/{id}/customer', PagePlaceholderController::class)->defaults('screenId', 'P-34')->name('reservation.customer')->whereNumber('id');
+        Route::get('screenings/{id}/customer', CustomerInfoController::class)->name('reservation.customer')->whereNumber('id');
         Route::get('screenings/{id}/tickets', PagePlaceholderController::class)->defaults('screenId', 'P-35')->name('reservation.tickets')->whereNumber('id');
     });
 

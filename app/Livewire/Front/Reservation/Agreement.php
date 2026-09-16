@@ -3,6 +3,7 @@
 namespace App\Livewire\Front\Reservation;
 
 use App\Livewire\Front\Reservation\Concerns\ResolvesScreening;
+use App\Livewire\Front\Reservation\Concerns\UsesReservationDraft;
 use App\Models\Screening;
 use App\Models\Seat;
 use App\Services\SeatLockService;
@@ -19,10 +20,14 @@ use Livewire\Component;
  *
  * **ポーリングしない**（4.3.10）。座席表を持たず、他のお客様の操作で変わる表示が無い。
  * ロックの期限切れは「次へ進む」の時点で読み直して検出する。
+ *
+ * 得た同意は `ReservationDraft`（セッション）へ記録する。本画面を経ずに P-33 以降の
+ * URLへ直接到達した利用者を、後続の画面が判別できるようにするため（4.3.12）。
  */
 class Agreement extends Component
 {
     use ResolvesScreening;
+    use UsesReservationDraft;
 
     /**
      * 表示中の案内の文言キー（7.17）。言語ファイルのキーをクライアントから
@@ -48,6 +53,9 @@ class Agreement extends Component
      * **販売不可・座席0件の案内は本メソッドでは設定しない。** いずれも描画時点の状態であり、
      * `render()` の `noticeKey()` が同じ判定で文言を決める（4.3.10）。ここで代入しても
      * 必ず上書きされるため、進めないことだけを決める。
+     *
+     * 同意は `ReservationDraft` に記録する。これが無ければ P-33 以降は先へ進めない
+     *（4.3.12。旧12章 残課題25）。
      */
     public function proceed(SeatLockService $locks): void
     {
@@ -68,6 +76,8 @@ class Agreement extends Component
 
             return;
         }
+
+        $this->draft()->agree($screening);
 
         $this->redirect(route('front.reservation.identify', ['id' => $this->screeningId]), navigate: false);
     }
@@ -103,11 +113,7 @@ class Agreement extends Component
             return $this->messageKey;
         }
 
-        // 別の上映回の座席を保持していると、この回の保持座席は常に0件になる。
-        // 「確保期限が過ぎました」と表示すると原因を誤らせる（4.3.9 と同じ振り分け）。
-        return $this->holdsOtherScreening($locks->holderKey())
-            ? 'front.reservation.errors.other_screening_reselect'
-            : 'front.reservation.errors.lock_expired';
+        return $this->lostSeatsNoticeKey($locks->holderKey());
     }
 
     /**

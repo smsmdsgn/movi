@@ -2,7 +2,9 @@
 
 namespace App\Livewire\Front\Reservation;
 
+use App\Livewire\Front\Reservation\Concerns\GuardsReservationStep;
 use App\Livewire\Front\Reservation\Concerns\ResolvesScreening;
+use App\Livewire\Front\Reservation\Concerns\UsesReservationDraft;
 use App\Models\Screening;
 use App\Services\SeatLockService;
 use Illuminate\Contracts\View\View;
@@ -21,13 +23,16 @@ use Livewire\Component;
  * （`Illuminate\Auth\Events\Login`、工程5-bで実装済み）が行う。本画面は移譲元の
  * `holder_key` を持ち回らない（4.3.11）。
  *
- * **操作に対する文言を持たない。** 2つの導線はいずれも前提（販売期間内・座席の保持）を
- * 満たさなければ何もせず、その理由は `render()` が状態から決める（P-32 の `noticeKey()` と
- * 同じ整理。4.3.10）。このため P-31・P-32 が持つ `messageKey` プロパティを置いていない。
+ * **操作に対する文言を持たない。** 2つの導線はいずれも前提（販売期間内・座席の保持・
+ * 利用規約への同意）を満たさなければ何もせず、その理由は `render()` が状態から決める
+ *（P-32 の `noticeKey()` と同じ整理。4.3.10）。このため P-31・P-32 が持つ `messageKey`
+ * プロパティを置いていない。
  */
 class Identify extends Component
 {
+    use GuardsReservationStep;
     use ResolvesScreening;
+    use UsesReservationDraft;
 
     public function mount(Screening $screening, SeatLockService $locks): void
     {
@@ -78,13 +83,11 @@ class Identify extends Component
 
     public function render(SeatLockService $locks): View
     {
-        $screening = $this->screeningOnSale();
-        $hasSeats = $screening !== null && $locks->heldSeatIds($screening, $locks->holderKey()) !== [];
+        $status = $this->stepStatus($locks);
 
-        return view('front.reservation.identify-choices', [
-            'onSale' => $screening !== null,
-            'hasSeats' => $hasSeats,
-            'noticeKey' => $this->noticeKey($screening !== null, $hasSeats, $locks),
+        return view('front.reservation.identify-choices', $status + [
+            'onSale' => $this->screeningOnSale() !== null,
+            'canProceed' => $status['noticeKey'] === null,
             'seatsUrl' => route('front.reservation.seats', ['id' => $this->screeningId]),
         ]);
     }
@@ -95,38 +98,5 @@ class Identify extends Component
     private function forwardToTickets(): void
     {
         $this->redirect(route('front.reservation.tickets', ['id' => $this->screeningId]), navigate: false);
-    }
-
-    /**
-     * 先へ進める状態か（販売期間内の回の座席を保持している）。
-     *
-     * **ロックの外側の判定であり厳密ではない**が、座席在庫は確定時の検証（8.2 手順1）が
-     * 最終的に保護する（4.3.9 と同じ整理）。
-     */
-    private function canProceed(SeatLockService $locks): bool
-    {
-        $screening = $this->screeningOnSale();
-
-        return $screening !== null && $locks->heldSeatIds($screening, $locks->holderKey()) !== [];
-    }
-
-    /**
-     * 画面に出す案内（7.17）。判定と振り分けは P-32 と同じ（4.3.10）。
-     */
-    private function noticeKey(bool $onSale, bool $hasSeats, SeatLockService $locks): ?string
-    {
-        if (! $onSale) {
-            return 'front.reservation.errors.out_of_sale';
-        }
-
-        if ($hasSeats) {
-            return null;
-        }
-
-        // 別の上映回の座席を保持していると、この回の保持座席は常に0件になる。
-        // 「確保期限が過ぎました」と表示すると原因を誤らせる（4.3.10 と同じ振り分け）。
-        return $this->holdsOtherScreening($locks->holderKey())
-            ? 'front.reservation.errors.other_screening_reselect'
-            : 'front.reservation.errors.lock_expired';
     }
 }

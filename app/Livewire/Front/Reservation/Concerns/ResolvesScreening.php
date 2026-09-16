@@ -85,4 +85,19 @@ trait ResolvesScreening
             ->where('screening_id', '!=', $this->screeningId)
             ->exists();
     }
+
+    /**
+     * この回の保持座席が0件のときの案内（7.17）。
+     *
+     * P-32（`Agreement`）と P-33・P-34（`GuardsReservationStep`）が共有する。同じ状態に
+     * 別の画面が別の文言を出さないよう、振り分けは1箇所に置く（4.3.12 と同じ趣旨）。
+     */
+    protected function lostSeatsNoticeKey(string $holderKey): string
+    {
+        // 別の上映回の座席を保持していると、この回の保持座席は常に0件になる。
+        // 「確保期限が過ぎました」と表示すると原因を誤らせる（4.3.9 / 4.3.10）。
+        return $this->holdsOtherScreening($holderKey)
+            ? 'front.reservation.errors.other_screening_reselect'
+            : 'front.reservation.errors.lock_expired';
+    }
 }
