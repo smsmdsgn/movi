@@ -36,7 +36,7 @@
              利用者の次の行動はいずれも「座席の選択からやり直す」で同じ（4.3.10）。 --}}
         <p>
             <a href="{{ $seatsUrl }}" class="inline-block border border-stone-400 px-4 py-2 text-sm underline decoration-stone-400 hover:bg-stone-100">
-                {{ __('front.reservation.agreement.back') }}
+                {{ __('front.reservation.back_to_seats') }}
             </a>
         </p>
     @elseif ($onSale)
@@ -85,7 +85,7 @@
 
         <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
             <a href="{{ $seatsUrl }}" class="border border-stone-400 px-4 py-3 text-sm underline decoration-stone-400 hover:bg-stone-100">
-                {{ __('front.reservation.agreement.back') }}
+                {{ __('front.reservation.back_to_seats') }}
             </a>
 
             <button

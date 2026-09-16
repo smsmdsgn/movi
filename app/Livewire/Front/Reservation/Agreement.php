@@ -82,7 +82,7 @@ class Agreement extends Component
             'seats' => $seats,
             // 3つの分岐の文言を1つのライブリージョンへ流す（要素ごと出し入れすると
             // 読み上げられない実装がある。P-31 のビューと同じ扱い）。
-            'noticeKey' => $this->noticeKey($screening !== null, $seats->isEmpty(), $locks),
+            'noticeKey' => $this->noticeKey($screening !== null, $seats->isNotEmpty(), $locks),
             'maxSeats' => SeatLockService::MAX_SEATS_PER_HOLDER,
             'seatsUrl' => route('front.reservation.seats', ['id' => $this->screeningId]),
             'termsUrl' => route('front.terms.index'),
@@ -93,13 +93,13 @@ class Agreement extends Component
      * 画面に出す案内（7.17）。描画時点の状態が操作の結果より優先される
      * （座席を失った利用者に、直前の操作に対する「同意が必要です」を出さない）。
      */
-    private function noticeKey(bool $onSale, bool $withoutSeats, SeatLockService $locks): ?string
+    private function noticeKey(bool $onSale, bool $hasSeats, SeatLockService $locks): ?string
     {
         if (! $onSale) {
             return 'front.reservation.errors.out_of_sale';
         }
 
-        if (! $withoutSeats) {
+        if ($hasSeats) {
             return $this->messageKey;
         }
 
