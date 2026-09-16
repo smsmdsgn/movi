@@ -18,6 +18,7 @@ use App\Models\SeatType;
 use App\Models\Theater;
 use App\Models\TicketType;
 use App\Models\User;
+use App\Services\SeatLockService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -451,4 +452,40 @@ function makeScreenings(Theater $theater, array $startTimes, int $bookingSurchar
             'ends_at' => $startsAt->addHours(2),
         ]))
         ->all();
+}
+
+/**
+ * 予約フロー（P-31 以降）のテスト用に、販売期間内の上映回と、その回のシアターに属する
+ * 座席を作成する。座席は `grid_col` の昇順（座席表の描画順）で返す。
+ *
+ * @return array{screening: Screening, seats: array<int, Seat>, theater: Theater}
+ */
+function makeReservationFixture(int $seatCount = 3): array
+{
+    $theater = createTheater();
+    $seatType = makeSeatsWithSurcharge($theater, $seatCount, 0);
+    $seats = Seat::where('seat_type_id', $seatType->id)->orderBy('id')->get()->all();
+
+    [$screening] = makeScreenings($theater, [CarbonImmutable::now()->addDay()->setTime(10, 0)]);
+
+    return ['screening' => $screening, 'seats' => $seats, 'theater' => $theater];
+}
+
+/**
+ * 座席を保持した状態（P-31 で選択済み）を作る。
+ *
+ * $holderKey を省略した場合は現在のテストプロセスの保持者キーを使う。**HTTPリクエストを
+ * 伴うテストでは省略できない**（`$this->get()` はテストプロセスとは別のセッションIDを
+ * 発行するため、`session:{id}` が一致しない）。会員として `user:{id}` を渡すこと。
+ */
+function holdSeatsForScreening(Screening $screening, ?string $holderKey, Seat ...$seats): void
+{
+    $locks = app(SeatLockService::class);
+    $holderKey ??= $locks->holderKey();
+
+    foreach ($seats as $seat) {
+        // 取得に失敗したまま進むと「用意したはずの座席が無いのに通るテスト」になる。
+        expect($locks->acquire($screening, $seat, $holderKey))
+            ->toBeTrue("座席 {$seat->id} のロックを取得できませんでした。");
+    }
 }

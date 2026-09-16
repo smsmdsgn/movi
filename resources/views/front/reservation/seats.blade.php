@@ -39,22 +39,7 @@
 
         <h1 class="mt-4 text-2xl font-bold">{{ __('front.reservation.heading') }}</h1>
 
-        <dl class="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 border border-stone-300 p-3 text-sm">
-            <dt class="text-stone-600">{{ __('front.reservation.screening.movie') }}</dt>
-            <dd class="font-bold">{{ $screening->booking->movie->title }}</dd>
-
-            <dt class="text-stone-600">{{ __('front.reservation.screening.cinema') }}</dt>
-            <dd>{{ $cinema->name }}</dd>
-
-            <dt class="text-stone-600">{{ __('front.reservation.screening.theater') }}</dt>
-            <dd>{{ $screening->theater->name }}</dd>
-
-            <dt class="text-stone-600">{{ __('front.reservation.screening.starts_at') }}</dt>
-            <dd class="tabular-nums">{{ $datetime }}</dd>
-
-            <dt class="text-stone-600">{{ __('front.reservation.screening.format') }}</dt>
-            <dd>{{ $screening->booking->format->name }}</dd>
-        </dl>
+        <x-front.reservation.screening-summary :screening="$screening" :cinema="$cinema" class="mt-4" />
 
         <div class="mt-6">
             <livewire:front.reservation.seat-selection :screening="$screening" />

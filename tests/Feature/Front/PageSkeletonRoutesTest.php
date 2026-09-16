@@ -25,7 +25,7 @@ it('館非依存ページ（7.1.1 P-07〜P-20）のルートが画面IDを返す
     'P-20 サイトマップ' => ['front.sitemap.index', 'P-20', []],
 ]);
 
-it('予約フロー（7.1.1 P-32以降）のルートが画面IDを返し、クロール対象外となる（19.3-6 / 4.3.9）', function (string $routeName, string $screenId, array $parameters) {
+it('予約フロー（7.1.1 P-33以降）のルートが画面IDを返し、クロール対象外となる（19.3-6 / 4.3.9）', function (string $routeName, string $screenId, array $parameters) {
     createCinema('gion', '祇園ムビ');
 
     $this->get(route($routeName, $parameters))
@@ -33,7 +33,7 @@ it('予約フロー（7.1.1 P-32以降）のルートが画面IDを返し、ク�
         ->assertSee($screenId)
         ->assertSee('name="robots" content="noindex, nofollow"', escape: false);
 })->with([
-    'P-32 同意画面' => ['front.reservation.agreement', 'P-32', ['id' => 1]],
+    'P-33 会員／非会員の選択' => ['front.reservation.identify', 'P-33', ['id' => 1]],
 ]);
 
 it('館非依存ページ（7.1.1 P-05, P-06）は会員専用のため未ログインでは401ではなくログイン画面へ遷移する', function (string $routeName, array $parameters) {

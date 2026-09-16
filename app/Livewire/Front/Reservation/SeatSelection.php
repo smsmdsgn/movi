@@ -3,6 +3,7 @@
 namespace App\Livewire\Front\Reservation;
 
 use App\Enums\SeatSelectionState;
+use App\Livewire\Front\Reservation\Concerns\ResolvesScreening;
 use App\Models\ReservationSeat;
 use App\Models\Screening;
 use App\Models\Seat;
@@ -26,8 +27,7 @@ use Livewire\Component;
  */
 class SeatSelection extends Component
 {
-    #[Locked]
-    public Screening $screening;
+    use ResolvesScreening;
 
     /**
      * 表示中の案内の文言キー（7.17）。次の操作まで消さない（ポーリングを跨いで残る。
@@ -46,7 +46,7 @@ class SeatSelection extends Component
 
     public function mount(Screening $screening, SeatLockService $locks): void
     {
-        $this->screening = $screening;
+        $this->rememberScreening($screening);
 
         // 4.3.4「別の上映回の座席選択に移行した時点で、前の上映回のロックを解放する」。
         // `acquire()` は他の上映回のロックが残っていると取得を拒むため、入場時に解放する（13.4.6）。
@@ -65,13 +65,28 @@ class SeatSelection extends Component
      * `acquire()` は失敗理由を返さない（4.3.8）。7.17 が別の文言を定める
      * 「販売期間外」と「座席数の上限」は本メソッドが取得の前に判定し、
      * 残る失敗（他者のロック・予約済み・座席の無効化）を「他のお客様が選択中」として扱う（4.3.9）。
+     *
+     * 座席IDは `int` で受けない。型宣言に任せると、非数値のパラメータが 7.17 の文言を
+     * 持たない `TypeError` になる（本エンドポイントは未認証の顧客に開かれている。4.3.10）。
      */
-    public function toggle(int $seatId, SeatLockService $locks): void
+    public function toggle(mixed $seatId, SeatLockService $locks): void
     {
         $this->messageKey = null;
 
-        if (! $this->screening->isOnSale()) {
+        $screening = $this->screeningOnSale();
+
+        if ($screening === null) {
             $this->messageKey = 'front.reservation.errors.out_of_sale';
+
+            return;
+        }
+
+        // `filter_var()` は配列なら false を返すが、`__toString()` を持たないオブジェクトでは
+        // `Error` を投げる。型宣言に任せない趣旨（4.3.10）を徹底するため先にスカラーを確かめる。
+        $seatId = is_scalar($seatId) ? filter_var($seatId, FILTER_VALIDATE_INT) : false;
+
+        if ($seatId === false) {
+            $this->messageKey = 'front.reservation.errors.lock_failed';
 
             return;
         }
@@ -82,7 +97,7 @@ class SeatSelection extends Component
         // 取得条件は `acquire()` が改めて判定するため、ここでは対象の特定のみを行う。
         $seat = Seat::query()
             ->available()
-            ->where('theater_id', $this->screening->theater_id)
+            ->where('theater_id', $screening->theater_id)
             ->find($seatId);
 
         if ($seat === null) {
@@ -91,10 +106,10 @@ class SeatSelection extends Component
             return;
         }
 
-        $heldSeatIds = $locks->heldSeatIds($this->screening, $holderKey);
+        $heldSeatIds = $locks->heldSeatIds($screening, $holderKey);
 
         if (in_array($seat->id, $heldSeatIds, true)) {
-            $locks->release($this->screening, $seat, $holderKey);
+            $locks->release($screening, $seat, $holderKey);
 
             return;
         }
@@ -114,7 +129,7 @@ class SeatSelection extends Component
             return;
         }
 
-        if (! $locks->acquire($this->screening, $seat, $holderKey)) {
+        if (! $locks->acquire($screening, $seat, $holderKey)) {
             $this->messageKey = 'front.reservation.errors.lock_failed';
         }
     }
@@ -131,13 +146,15 @@ class SeatSelection extends Component
      */
     public function refreshSeatMap(SeatLockService $locks): void
     {
-        if (! $this->screening->isOnSale()) {
+        $screening = $this->screeningOnSale();
+
+        if ($screening === null) {
             return;
         }
 
         $holderKey = $locks->holderKey();
 
-        if (count($locks->heldSeatIds($this->screening, $holderKey)) >= $this->heldSeatCount) {
+        if (count($locks->heldSeatIds($screening, $holderKey)) >= $this->heldSeatCount) {
             return;
         }
 
@@ -153,19 +170,21 @@ class SeatSelection extends Component
     {
         $this->messageKey = null;
 
-        if (! $this->screening->isOnSale()) {
+        $screening = $this->screeningOnSale();
+
+        if ($screening === null) {
             $this->messageKey = 'front.reservation.errors.out_of_sale';
 
             return;
         }
 
-        if ($locks->heldSeatIds($this->screening, $locks->holderKey()) === []) {
+        if ($locks->heldSeatIds($screening, $locks->holderKey()) === []) {
             $this->messageKey = 'front.reservation.errors.no_seats';
 
             return;
         }
 
-        $this->redirect(route('front.reservation.agreement', ['id' => $this->screening->id]), navigate: false);
+        $this->redirect(route('front.reservation.agreement', ['id' => $this->screeningId]), navigate: false);
     }
 
     public function render(SeatLockService $locks): View
@@ -174,13 +193,13 @@ class SeatSelection extends Component
         // `front/reservation/seats.blade.php` が持ち、コントローラが読み込み済み）。
         // ここで関連を読み込むと、10秒ごとのポーリングのたびに不要なクエリが増える。
         $holderKey = $locks->holderKey();
-        $onSale = $this->screening->isOnSale();
-        $seats = $onSale ? $this->seats() : new EloquentCollection;
-        $heldSeatIds = $onSale ? $locks->heldSeatIds($this->screening, $holderKey) : [];
+        $screening = $this->screeningOnSale();
+        $seats = $screening !== null ? $this->seats($screening) : new EloquentCollection;
+        $heldSeatIds = $screening !== null ? $locks->heldSeatIds($screening, $holderKey) : [];
         $this->heldSeatCount = count($heldSeatIds);
 
         return view('front.reservation.seat-selection', [
-            'onSale' => $onSale,
+            'onSale' => $screening !== null,
             'seats' => $seats,
             'states' => $this->states($seats, $heldSeatIds, $holderKey),
             'selectedSeats' => $seats->whereIn('id', $heldSeatIds)->values(),
@@ -199,12 +218,12 @@ class SeatSelection extends Component
      *
      * @return EloquentCollection<int, Seat>
      */
-    private function seats(): EloquentCollection
+    private function seats(Screening $screening): EloquentCollection
     {
         return Seat::query()
             ->available()
             ->with('seatType')
-            ->where('theater_id', $this->screening->theater_id)
+            ->where('theater_id', $screening->theater_id)
             ->orderBy('grid_row')
             ->orderBy('grid_col')
             ->get();
@@ -228,12 +247,12 @@ class SeatSelection extends Component
 
         $reserved = ReservationSeat::query()
             ->occupying()
-            ->where('screening_id', $this->screening->id)
+            ->where('screening_id', $this->screeningId)
             ->pluck('seat_id');
 
         $lockedByOthers = SeatLock::query()
             ->active()
-            ->where('screening_id', $this->screening->id)
+            ->where('screening_id', $this->screeningId)
             ->where('holder_key', '!=', $holderKey)
             ->pluck('seat_id');
 
@@ -245,17 +264,5 @@ class SeatSelection extends Component
                 $occupied->has($seat->id),
             ),
         ]);
-    }
-
-    /**
-     * 他の上映回のロックを保持しているか（`acquire()` の条件6、4.3.4）。
-     */
-    private function holdsOtherScreening(string $holderKey): bool
-    {
-        return SeatLock::query()
-            ->active()
-            ->where('holder_key', $holderKey)
-            ->where('screening_id', '!=', $this->screening->id)
-            ->exists();
     }
 }

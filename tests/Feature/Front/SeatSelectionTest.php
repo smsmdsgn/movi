@@ -2,36 +2,17 @@
 
 use App\Enums\SeatSelectionState;
 use App\Livewire\Front\Reservation\SeatSelection;
-use App\Models\Screening;
-use App\Models\Seat;
 use App\Models\SeatLock;
-use App\Models\Theater;
 use App\Models\User;
 use App\Services\SeatLockService;
 use Carbon\CarbonImmutable;
+use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Livewire;
 
-/**
+/*
  * 座席選択（P-31、7.6）。座席の状態表示・ロックの取得と解放・7.17 の文言の出し分けを固定する。
  * ロックの取得条件そのものは `tests/Feature/Reservation/SeatLockServiceTest.php` が担保する。
  */
-
-/**
- * 販売期間内の上映回と、その回のシアターに属する座席を作る。
- *
- * @return array{screening: Screening, seats: array<int, Seat>, theater: Theater}
- */
-function makeSeatSelectionFixture(int $seatCount = 3): array
-{
-    $theater = createTheater();
-    $seatType = makeSeatsWithSurcharge($theater, $seatCount, 0);
-    $seats = Seat::where('seat_type_id', $seatType->id)->orderBy('id')->get()->all();
-
-    [$screening] = makeScreenings($theater, [CarbonImmutable::now()->addDay()->setTime(10, 0)]);
-
-    return ['screening' => $screening, 'seats' => $seats, 'theater' => $theater];
-}
-
 function seatLockService(): SeatLockService
 {
     return app(SeatLockService::class);
@@ -50,7 +31,7 @@ function seatStateOf(string $html, int $seatId): ?string
 }
 
 it('座席選択ページが上映情報と座席表を表示し、クロール対象外とする（19.3-6）', function () {
-    ['screening' => $screening, 'seats' => $seats, 'theater' => $theater] = makeSeatSelectionFixture();
+    ['screening' => $screening, 'seats' => $seats, 'theater' => $theater] = makeReservationFixture();
 
     $this->get(route('front.reservation.seats', ['id' => $screening->id]))
         ->assertOk()
@@ -61,8 +42,37 @@ it('座席選択ページが上映情報と座席表を表示し、クロール�
         ->assertSee('name="robots" content="noindex, nofollow"', escape: false);
 });
 
+it('上映情報に 7.6.1-1 の5項目をすべて表示する（screening-summary）', function () {
+    ['screening' => $screening, 'theater' => $theater] = makeReservationFixture();
+
+    $startsAt = $screening->starts_at;
+    $datetime = __('front.reservation.screening.datetime', [
+        'date' => $startsAt->format('Y/n/j'),
+        'weekday' => __('front.schedule.weekdays')[$startsAt->dayOfWeek],
+        'time' => $startsAt->format('H:i'),
+    ]);
+
+    // 共通部品（P-31・P-32 が使う）のため、項目が1つ落ちても他のテストでは気づけない。
+    $this->get(route('front.reservation.seats', ['id' => $screening->id]))
+        ->assertOk()
+        ->assertSee($screening->booking->movie->title)
+        ->assertSee($theater->cinema->name)
+        ->assertSee($theater->name)
+        ->assertSee($datetime)
+        ->assertSee($screening->booking->format->name);
+});
+
+it('上映回IDはクライアントから差し替えられない（4.3.10）', function () {
+    ['screening' => $screening, 'theater' => $theater] = makeReservationFixture();
+    $other = createScreeningForTheater($theater);
+
+    // `#[Locked]` が外れると、予約フロー全画面（ResolvesScreening の利用側）が同時に穴になる。
+    Livewire::test(SeatSelection::class, ['screening' => $screening])
+        ->set('screeningId', $other->id);
+})->throws(CannotUpdateLockedPropertyException::class);
+
 it('選択不可の座席は操作させないがフォーカスは当てられる（7.6.4-3 / 4.3.9）', function () {
-    ['screening' => $screening, 'seats' => $seats] = makeSeatSelectionFixture();
+    ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
 
     seatLockService()->acquire($screening, $seats[0], 'session:other');
 
@@ -75,7 +85,7 @@ it('選択不可の座席は操作させないがフォーカスは当てられ�
 });
 
 it('座席表は10秒間隔のポーリングで更新する（6.4.3-1）', function () {
-    ['screening' => $screening] = makeSeatSelectionFixture();
+    ['screening' => $screening] = makeReservationFixture();
 
     Livewire::test(SeatSelection::class, ['screening' => $screening])
         ->assertSee('wire:poll.10s="refreshSeatMap"', escape: false);
@@ -86,7 +96,7 @@ it('存在しない上映回は404を返す', function () {
 });
 
 it('上映回の館をヘッダー・パンくずの館として確定させる（4.1.3-1）', function () {
-    ['screening' => $screening, 'theater' => $theater] = makeSeatSelectionFixture();
+    ['screening' => $screening, 'theater' => $theater] = makeReservationFixture();
     createCinema('other-cinema', '別の館');
 
     // ヘッダーの劇場切替は全館名を <option> に出すため、館名の有無だけでは検証にならない。
@@ -100,7 +110,7 @@ it('上映回の館をヘッダー・パンくずの館として確定させる�
 });
 
 it('座席をクリックするとロックを取得し、再クリックで解放する（7.6.2）', function () {
-    ['screening' => $screening, 'seats' => $seats] = makeSeatSelectionFixture();
+    ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
 
     $component = Livewire::test(SeatSelection::class, ['screening' => $screening])
         ->call('toggle', $seats[0]->id);
@@ -118,7 +128,7 @@ it('座席をクリックするとロックを取得し、再クリックで解�
 });
 
 it('会員の保持者キーは user:{id} とする（13.3）', function () {
-    ['screening' => $screening, 'seats' => $seats] = makeSeatSelectionFixture();
+    ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
     $user = User::factory()->create();
 
     Livewire::actingAs($user)
@@ -129,7 +139,7 @@ it('会員の保持者キーは user:{id} とする（13.3）', function () {
 });
 
 it('他者がロック中の座席は選択できず、7.17 の文言を表示する', function () {
-    ['screening' => $screening, 'seats' => $seats] = makeSeatSelectionFixture();
+    ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
 
     seatLockService()->acquire($screening, $seats[0], 'session:other');
 
@@ -145,7 +155,7 @@ it('他者がロック中の座席は選択できず、7.17 の文言を表示�
 });
 
 it('決済済みの座席は選択できない状態で描画される（6.4.2）', function () {
-    ['screening' => $screening, 'seats' => $seats] = makeSeatSelectionFixture();
+    ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
 
     createReservationSeat($screening->id, $seats[0]->id, createTicketType()->id);
 
@@ -156,7 +166,7 @@ it('決済済みの座席は選択できない状態で描画される（6.4.2�
 });
 
 it('使用不可の座席は座席表に描画しない（6.2 / seat-map）', function () {
-    ['screening' => $screening, 'seats' => $seats] = makeSeatSelectionFixture();
+    ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
 
     $seats[0]->update(['is_available' => false]);
 
@@ -167,7 +177,7 @@ it('使用不可の座席は座席表に描画しない（6.2 / seat-map）', fu
 });
 
 it('8席を超えて選択できない（4.3.4 / 17.8-2）', function () {
-    ['screening' => $screening, 'seats' => $seats] = makeSeatSelectionFixture(SeatLockService::MAX_SEATS_PER_HOLDER + 1);
+    ['screening' => $screening, 'seats' => $seats] = makeReservationFixture(SeatLockService::MAX_SEATS_PER_HOLDER + 1);
 
     $component = Livewire::test(SeatSelection::class, ['screening' => $screening]);
 
@@ -182,7 +192,7 @@ it('8席を超えて選択できない（4.3.4 / 17.8-2）', function () {
 });
 
 it('販売期間外の上映回は座席表を出さず、7.17 の文言のみを表示する（4.3.1）', function () {
-    ['screening' => $screening, 'seats' => $seats] = makeSeatSelectionFixture();
+    ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
 
     $screening->update([
         'starts_at' => CarbonImmutable::now()->subHour(),
@@ -198,7 +208,7 @@ it('販売期間外の上映回は座席表を出さず、7.17 の文言のみ�
 });
 
 it('入場時に他の上映回のロックを解放する（4.3.4）', function () {
-    ['screening' => $screening, 'seats' => $seats, 'theater' => $theater] = makeSeatSelectionFixture();
+    ['screening' => $screening, 'seats' => $seats, 'theater' => $theater] = makeReservationFixture();
     $holderKey = seatLockService()->holderKey();
 
     $other = createScreeningForTheater($theater);
@@ -214,7 +224,7 @@ it('入場時に他の上映回のロックを解放する（4.3.4）', function
 });
 
 it('販売期間外の回を開いても他の上映回のロックは解放しない（4.3.4 / 4.3.9）', function () {
-    ['screening' => $screening, 'seats' => $seats, 'theater' => $theater] = makeSeatSelectionFixture();
+    ['screening' => $screening, 'seats' => $seats, 'theater' => $theater] = makeReservationFixture();
     $holderKey = seatLockService()->holderKey();
 
     seatLockService()->acquire($screening, $seats[0], $holderKey);
@@ -233,7 +243,7 @@ it('販売期間外の回を開いても他の上映回のロックは解放し�
 });
 
 it('別の上映回のロックを保持している場合は専用の案内を表示する（4.3.9）', function () {
-    ['screening' => $screening, 'seats' => $seats, 'theater' => $theater] = makeSeatSelectionFixture();
+    ['screening' => $screening, 'seats' => $seats, 'theater' => $theater] = makeReservationFixture();
 
     $component = Livewire::test(SeatSelection::class, ['screening' => $screening]);
 
@@ -252,7 +262,7 @@ it('別の上映回のロックを保持している場合は専用の案内を�
 });
 
 it('ポーリング時に保持座席が減っていればロックの期限切れを知らせる（6.4.1-3 / 7.17）', function () {
-    ['screening' => $screening, 'seats' => $seats] = makeSeatSelectionFixture();
+    ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
 
     $component = Livewire::test(SeatSelection::class, ['screening' => $screening])
         ->call('toggle', $seats[0]->id)
@@ -266,7 +276,7 @@ it('ポーリング時に保持座席が減っていればロックの期限切�
 });
 
 it('別タブで他の上映回へ移った場合、ポーリングは期限切れではなく専用の案内を出す（4.3.9）', function () {
-    ['screening' => $screening, 'seats' => $seats, 'theater' => $theater] = makeSeatSelectionFixture(2);
+    ['screening' => $screening, 'seats' => $seats, 'theater' => $theater] = makeReservationFixture(2);
 
     $component = Livewire::test(SeatSelection::class, ['screening' => $screening])
         ->call('toggle', $seats[0]->id);
@@ -286,7 +296,7 @@ it('別タブで他の上映回へ移った場合、ポーリングは期限切�
 });
 
 it('座席を選択せずに次へ進むことはできない', function () {
-    ['screening' => $screening] = makeSeatSelectionFixture();
+    ['screening' => $screening] = makeReservationFixture();
 
     Livewire::test(SeatSelection::class, ['screening' => $screening])
         ->call('proceed')
@@ -294,8 +304,37 @@ it('座席を選択せずに次へ進むことはできない', function () {
         ->assertSee(__('front.reservation.errors.no_seats'));
 });
 
+it('上映回が削除されても 7.17 の文言を返し、例外にしない（4.3.10）', function () {
+    ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
+
+    $component = Livewire::test(SeatSelection::class, ['screening' => $screening]);
+
+    // A-09 は有効な座席ロックがある回を削除しないため、1席も選んでいない利用者が
+    // 画面を開いたままの場合にこの状態になる（旧12章 残課題23）。
+    $screening->delete();
+
+    $component->call('toggle', $seats[0]->id)
+        ->assertSee(__('front.reservation.errors.out_of_sale'))
+        ->assertDontSee(__('front.reservation.screen'))
+        ->call('refreshSeatMap')
+        ->call('proceed')
+        ->assertNoRedirect();
+
+    expect(SeatLock::count())->toBe(0);
+});
+
+it('数値でない座席IDを送っても 7.17 の文言を返し、例外にしない（4.3.10）', function () {
+    ['screening' => $screening] = makeReservationFixture();
+
+    Livewire::test(SeatSelection::class, ['screening' => $screening])
+        ->call('toggle', 'seat-1')
+        ->assertSee(__('front.reservation.errors.lock_failed'));
+
+    expect(SeatLock::count())->toBe(0);
+});
+
 it('座席を選択して次へ進むと同意画面（P-32）へ遷移する（7.18）', function () {
-    ['screening' => $screening, 'seats' => $seats] = makeSeatSelectionFixture();
+    ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
 
     Livewire::test(SeatSelection::class, ['screening' => $screening])
         ->call('toggle', $seats[0]->id)
