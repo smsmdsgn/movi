@@ -11,6 +11,9 @@ allowed-tools: Read, Grep, Glob
 - 無料鑑賞券と割引は併用しない
 - 予約成立時点の金額を `t_reservation_seats` に保存する
 - クライアントから送られた金額を信用しない
+- `calculate()`（DB読み込み）が既定。座席・券種をすでに読み込み済みの一括生成
+  （シーダー等）でのみ `calculateResolved()`（解決済み版）を使う。**クライアントの
+  入力を経由する画面では使わない**（`$regularAmounts` を引数に取るため）
 
 ## 割引（6.5.2）
 

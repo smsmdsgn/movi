@@ -5,9 +5,11 @@ use App\Enums\ReservationStatus;
 use App\Models\Cinema;
 use App\Models\Reservation;
 use App\Models\ReservationSeat;
+use App\Models\Screening;
 use App\Models\Stamp;
 use App\Models\TicketType;
 use App\Models\User;
+use App\Services\PricingService;
 use Carbon\CarbonImmutable;
 use Database\Seeders\GionSeeder;
 use Database\Seeders\MasterDataSeeder;
@@ -86,25 +88,79 @@ test('occupied seat count for a screening stays within the 5-80% occupancy range
     expect($occupied)->toBeLessThanOrEqual((int) round(100 * SeedConfig::RESERVATION_MAX_OCCUPANCY_PERCENT / 100));
 });
 
-test('each seat amount equals ticket price plus the booking surcharge plus the seat type surcharge', function () {
+/*
+ * 金額は工程5-h から PricingService::calculateResolved() で求める（旧12章 残課題7）。
+ * `now()->subDay()` は実行時刻の時分をそのまま引き継ぐため、レイトショー（6.5.2、
+ * 開始時刻20:00以降）の成否がテストの実行時刻に左右される。金額の検証では
+ * 時刻を明示的に固定し、レイトショーが成立する・しない双方を確定的に再現する。
+ */
+
+test('each seat amount matches PricingService for the seeded seat/ticket assignment (regular hours)', function () {
     $theater = createTheater();
     makeSeatsWithSurcharge($theater, 30, 300);
-    [$screening] = makeScreenings($theater, [now()->subDay()], bookingSurcharge: 200);
+    // 10:00 開始（レイトショーの対象外）に固定する。
+    [$screening] = makeScreenings($theater, [now()->subDay()->setTime(10, 0)], bookingSurcharge: 200);
+
+    Artisan::call('db:seed', ['--class' => ReservationSeeder::class, '--force' => true]);
+
+    assertSeededAmountsMatchPricingService($screening->id);
+});
+
+test('a late-show screening discounts every occupied seat（6.5.2）', function () {
+    $theater = createTheater();
+    makeSeatsWithSurcharge($theater, 30, 300);
+    // 21:00 開始（レイトショーの対象）に固定する。
+    [$screening] = makeScreenings($theater, [now()->subDay()->setTime(21, 0)], bookingSurcharge: 200);
 
     Artisan::call('db:seed', ['--class' => ReservationSeeder::class, '--force' => true]);
 
     $seats = ReservationSeat::where('screening_id', $screening->id)->with('ticketType')->get();
-
     expect($seats)->not->toBeEmpty();
 
+    // 全席がレイトショーで割引されることを固定する。ペア割が勝つ場合は対象外の席
+    // （余りの1枚・非大人席）が割引0円のままになりうるため、この assertion は
+    // 「同額時はレイトショーを優先する」（6.5.2-1）に依存する。MasterDataSeeder の
+    // 大人券種価格（2,000円）ではペア割の1席あたり割引（500円）がレイトショーと
+    // 常に同額になり、レイトショーが勝つ。大人価格を変えると崩れる前提であることに注意。
     foreach ($seats as $seat) {
-        expect($seat->amount)->toBe($seat->ticketType->price + 200 + 300);
+        $regular = $seat->ticketType->price + 200 + 300;
+        expect($seat->amount)->toBeLessThan($regular);
     }
 
-    $reservation = Reservation::where('screening_id', $screening->id)->first();
-    $expectedTotal = (int) ReservationSeat::where('reservation_id', $reservation->id)->sum('amount');
-    expect($reservation->total_amount)->toBe($expectedTotal);
+    assertSeededAmountsMatchPricingService($screening->id);
 });
+
+/**
+ * 保存済みの座席・券種の組み合わせで PricingService::calculate() を呼び直し、
+ * 保存された amount / total_amount と一致することを確認する。
+ *
+ * 割引の判定・下限そのものは tests/Feature/Reservation/PricingServiceTest.php が
+ * 担保するため、ここでは「シーダーが計算した金額」と「PricingService が計算する
+ * 金額」が食い違わないこと（旧12章 残課題7 の再発防止）だけを確認する。
+ */
+function assertSeededAmountsMatchPricingService(int $screeningId): void
+{
+    $reservations = Reservation::where('screening_id', $screeningId)->with('seats')->get();
+    expect($reservations)->not->toBeEmpty();
+
+    $pricing = app(PricingService::class);
+
+    foreach ($reservations as $reservation) {
+        $seatSelections = $reservation->seats->pluck('ticket_type_id', 'seat_id')->all();
+
+        // `calculate()` は取り直した Screening を渡しても preventLazyLoading を踏まない
+        // （単一行の find() 由来）が、キャッシュを避け実際の呼び出し経路に揃えるため
+        // 毎回取り直す。
+        $breakdown = $pricing->calculate(Screening::findOrFail($screeningId), $seatSelections);
+        $expectedBySeat = collect($breakdown->seats)->keyBy('seatId');
+
+        foreach ($reservation->seats as $seat) {
+            expect($seat->amount)->toBe($expectedBySeat[$seat->seat_id]->amount());
+        }
+
+        expect($reservation->total_amount)->toBe($breakdown->total());
+    }
+}
 
 test('a paid reservation always has an 8-digit reservation number and a 32-character entry code', function () {
     $theater = createTheater();

@@ -638,3 +638,148 @@ it('券種価格が全席0円なら無料鑑賞券を消費しない', function 
     expect($breakdown->freeTicketId)->toBeNull()
         ->and($breakdown->total())->toBe(300);
 });
+
+/*
+|--------------------------------------------------------------------------
+| calculateResolved（一括生成向け、DBへ問い合わせない）
+|--------------------------------------------------------------------------
+*/
+
+it('calculateResolved は calculate と同じ結果になる（ペア割）', function () {
+    ['screening' => $screening, 'seats' => $seats] = pricingFixture(seatCount: 2, bookingSurcharge: 100);
+    $adult = adultTicket(2000);
+
+    $seatSelections = [$seats[0]->id => $adult->id, $seats[1]->id => $adult->id];
+
+    $viaCalculate = pricing()->calculate($screening, $seatSelections);
+    $viaResolved = pricing()->calculateResolved(
+        $seatSelections,
+        [$seats[0]->id => 0, $seats[1]->id => 0],
+        bookingSurcharge: 100,
+        ticketTypes: [$adult->id => $adult],
+        isLateShow: false,
+    );
+
+    expect($viaResolved->total())->toBe($viaCalculate->total())
+        ->and($viaResolved->discount)->toBe($viaCalculate->discount)
+        ->and($viaResolved->discountAmount())->toBe($viaCalculate->discountAmount());
+});
+
+it('calculateResolved はレイトショーを bool で受け取る', function () {
+    ['seats' => $seats] = pricingFixture(seatCount: 1);
+    $adult = adultTicket(2000);
+
+    $breakdown = pricing()->calculateResolved(
+        [$seats[0]->id => $adult->id],
+        [$seats[0]->id => 0],
+        bookingSurcharge: 0,
+        ticketTypes: [$adult->id => $adult],
+        isLateShow: true,
+    );
+
+    expect($breakdown->discount)->toBe(Discount::LateShow)
+        ->and($breakdown->total())->toBe(1500);
+});
+
+it('calculateResolved は未整列の座席IDでも昇順に整えて配分する', function () {
+    ['seats' => $seats] = pricingFixture(seatCount: 3);
+    $adult = adultTicket(2000);
+
+    // 意図的に降順で渡す。
+    $breakdown = pricing()->calculateResolved(
+        [$seats[2]->id => $adult->id, $seats[0]->id => $adult->id, $seats[1]->id => $adult->id],
+        [$seats[0]->id => 0, $seats[1]->id => 0, $seats[2]->id => 0],
+        bookingSurcharge: 0,
+        ticketTypes: [$adult->id => $adult],
+        isLateShow: false,
+    );
+
+    expect(array_map(fn ($seat) => $seat->seatId, $breakdown->seats))
+        ->toBe([$seats[0]->id, $seats[1]->id, $seats[2]->id]);
+});
+
+it('calculateResolved も無料鑑賞券を受け取れる', function () {
+    ['seats' => $seats] = pricingFixture(seatCount: 1);
+    $adult = adultTicket(2000);
+    $ticket = createFreeTicket();
+
+    $breakdown = pricing()->calculateResolved(
+        [$seats[0]->id => $adult->id],
+        [$seats[0]->id => 0],
+        bookingSurcharge: 0,
+        ticketTypes: [$adult->id => $adult],
+        isLateShow: false,
+        freeTicket: $ticket,
+    );
+
+    expect($breakdown->freeTicketId)->toBe($ticket->id)
+        ->and($breakdown->total())->toBe(0);
+});
+
+it('calculateResolved は座席が無ければ0円の内訳を返す', function () {
+    expect(pricing()->calculateResolved([], [], 0, [], isLateShow: false)->total())->toBe(0);
+});
+
+it('calculateResolved は座席種別の追加料金と上映編成の追加料金を合算する', function () {
+    ['seats' => $seats] = pricingFixture(seatCount: 1);
+    $adult = adultTicket(2000);
+
+    $breakdown = pricing()->calculateResolved(
+        [$seats[0]->id => $adult->id],
+        [$seats[0]->id => 300],
+        bookingSurcharge: 200,
+        ticketTypes: [$adult->id => $adult],
+        isLateShow: false,
+    );
+
+    // 2000（券種価格）+ 200（上映編成）+ 300（座席種別）
+    expect($breakdown->total())->toBe(2500);
+});
+
+it('calculateResolved は無料鑑賞券が使えない場合、無料鑑賞券なしのレイトショーへ正しく落ちる', function () {
+    // `applyFreeTicket()` から `applyBestDiscount()` へのフォールバックに渡す
+    // `$isLateShow` を、リファクタ時に誤って固定値にしても検出できるようにする。
+    ['seats' => $seats] = pricingFixture(seatCount: 1);
+    $free = makeTicketType('無料', 0);
+    $usedTicket = createFreeTicket();
+    $usedTicket->forceFill(['used_at' => CarbonImmutable::now()])->save();
+
+    $breakdown = pricing()->calculateResolved(
+        [$seats[0]->id => $free->id],
+        [$seats[0]->id => 300],
+        bookingSurcharge: 0,
+        ticketTypes: [$free->id => $free],
+        isLateShow: true,
+        freeTicket: $usedTicket,
+    );
+
+    // 券種価格0円・追加料金300円に対しレイトショー500円引き（下限0円）。
+    expect($breakdown->freeTicketId)->toBeNull()
+        ->and($breakdown->discount)->toBe(Discount::LateShow)
+        ->and($breakdown->total())->toBe(0);
+});
+
+it('calculateResolved は存在しない座席の追加料金を渡すと例外を投げる', function () {
+    ['seats' => $seats] = pricingFixture(seatCount: 1);
+    $adult = adultTicket(2000);
+
+    pricing()->calculateResolved(
+        [$seats[0]->id => $adult->id],
+        [],
+        bookingSurcharge: 0,
+        ticketTypes: [$adult->id => $adult],
+        isLateShow: false,
+    );
+})->throws(InvalidArgumentException::class);
+
+it('calculateResolved は存在しない券種を渡すと例外を投げる', function () {
+    ['seats' => $seats] = pricingFixture(seatCount: 1);
+
+    pricing()->calculateResolved(
+        [$seats[0]->id => 999_999],
+        [$seats[0]->id => 0],
+        bookingSurcharge: 0,
+        ticketTypes: [],
+        isLateShow: false,
+    );
+})->throws(InvalidArgumentException::class);

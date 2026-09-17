@@ -13,6 +13,7 @@ use App\Models\Seat;
 use App\Models\Stamp;
 use App\Models\TicketType;
 use App\Models\User;
+use App\Services\PricingService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -38,13 +39,17 @@ use Illuminate\Support\Str;
  * `pending` の座席ロック（`t_seat_locks`）は投入しない。`SeatLockService`（13.4.6）が
  * 未実装で直接操作は規約に反すること、ロックはB-01により10分程度で削除される
  * 短命なデータであることから、投入する実益が乏しいため見送った。
+ *
+ * 金額（6.5.4）と無料鑑賞券の適用（4.5.2）は `PricingService::calculate()` で求める
+ * （工程5-h、旧12章 残課題7）。件数が少数のため `ReservationSeeder` と異なり
+ * DB読み込み版をそのまま使い、解決済み版（`calculateResolved()`）は使わない。
  */
 class GionReservationSeeder extends Seeder
 {
     /** @var array<int, array<int, bool>> screeningId => [seatId => true]（このシーダー実行内での座席の重複割当防止） */
     private array $usedSeatIdsByScreening = [];
 
-    public function run(): void
+    public function run(PricingService $pricing): void
     {
         $gion = Cinema::where('slug', SeedConfig::GION_SLUG)->first();
 
@@ -97,7 +102,7 @@ class GionReservationSeeder extends Seeder
             return;
         }
 
-        DB::transaction(function () use ($pastScreenings, $futureScreenings, $member, $ticketType) {
+        DB::transaction(function () use ($pastScreenings, $futureScreenings, $member, $ticketType, $pricing) {
             // [1..STAMPS_PER_FREE_TICKET]（$pastScreenings の2番目以降）を来場に使う。
             // starts_at 降順のため、この中で最も新しいのは stampScreenings[0]
             $stampScreenings = array_slice($pastScreenings->all(), 1, SeedConfig::STAMPS_PER_FREE_TICKET);
@@ -107,25 +112,25 @@ class GionReservationSeeder extends Seeder
             // うち1件は不来場（no-show）とする（入場有無を問わず付与されることの確認）
             $stamps = [];
             foreach ($stampScreenings as $i => $screening) {
-                $stamps[] = $this->seedPastVisit($screening, $member, $ticketType, checkedIn: $i !== 1);
+                $stamps[] = $this->seedPastVisit($screening, $member, $ticketType, $pricing, checkedIn: $i !== 1);
             }
             // スタンプは来場のうち最も新しい上映回（stampScreenings[0]）の開始時点で
             // 5個に到達する（4.5.1-5「上映回の開始時点」）ため、無料鑑賞券の発行日時も揃える
             $freeTicket = $this->exchangeStampsForFreeTicket($member, $stamps, $stampScreenings[0]->starts_at);
 
-            $this->seedCancelledReservation($stampScreenings[0], $member, $ticketType);
-            $this->seedGuestCheckedInVisit($stampScreenings[1], $ticketType);
+            $this->seedCancelledReservation($stampScreenings[0], $member, $ticketType, $pricing);
+            $this->seedGuestCheckedInVisit($stampScreenings[1], $ticketType, $pricing);
 
             // 無料鑑賞券使用の予約は、スタンプの来場（$stampScreenings）よりも新しい
             // 過去上映回（$pastScreenings[0]）に作る。発行より後に使用するという
             // 時系列を保つため。未来の上映回ではスタンプ自体がまだ付与されない
             // （4.5.1-5）ため、無料鑑賞券使用席に限ってスタンプが付かないという
             // 4.5.1-4の効果を、他の過去の来場との対比で確認できるようにする
-            $this->seedFreeTicketUsage($pastScreenings[0], $member, $ticketType, $freeTicket);
+            $this->seedFreeTicketUsage($pastScreenings[0], $member, $ticketType, $freeTicket, $pricing);
 
-            $this->seedUpcomingReservation($futureScreenings[0], $member, $ticketType);
-            $this->seedPendingReservation($futureScreenings[1], $ticketType);
-            $this->seedExpiredReservation($futureScreenings[2], $ticketType);
+            $this->seedUpcomingReservation($futureScreenings[0], $member, $ticketType, $pricing);
+            $this->seedPendingReservation($futureScreenings[1], $ticketType, $pricing);
+            $this->seedExpiredReservation($futureScreenings[2], $ticketType, $pricing);
         });
     }
 
@@ -133,10 +138,10 @@ class GionReservationSeeder extends Seeder
      * 決済済み・過去上映回の予約を1件作成し、付与されるスタンプを返す（4.5.1）。
      * 入場有無を問わず付与するため、不来場（$checkedIn = false）でもスタンプは付く。
      */
-    private function seedPastVisit(Screening $screening, User $member, TicketType $ticketType, bool $checkedIn): Stamp
+    private function seedPastVisit(Screening $screening, User $member, TicketType $ticketType, PricingService $pricing, bool $checkedIn): Stamp
     {
         $seat = $this->pickSeat($screening);
-        $amount = $this->seatAmount($screening, $seat, $ticketType);
+        $amount = $this->seatAmount($pricing, $screening, $seat, $ticketType);
         $purchasedAt = $screening->starts_at->subDays(2);
         $checkedInAt = $checkedIn ? $screening->starts_at->addMinutes(5) : null;
 
@@ -170,10 +175,10 @@ class GionReservationSeeder extends Seeder
      * 決済済み・過去上映回・キャンセル済みの予約を1件作成する（4.4）。
      * 座席は解放済み（released_at 設定）とし、再販可能な状態に戻す（6.4.2）。
      */
-    private function seedCancelledReservation(Screening $screening, User $member, TicketType $ticketType): void
+    private function seedCancelledReservation(Screening $screening, User $member, TicketType $ticketType, PricingService $pricing): void
     {
         $seat = $this->pickSeat($screening);
-        $amount = $this->seatAmount($screening, $seat, $ticketType);
+        $amount = $this->seatAmount($pricing, $screening, $seat, $ticketType);
         $purchasedAt = $screening->starts_at->subDays(2);
         $cancelledAt = $screening->starts_at->subDay();
 
@@ -201,10 +206,10 @@ class GionReservationSeeder extends Seeder
     /**
      * 非会員・決済済み・過去上映回・入場済みの予約を1件作成する（4.3.5の予約照会確認用）。
      */
-    private function seedGuestCheckedInVisit(Screening $screening, TicketType $ticketType): void
+    private function seedGuestCheckedInVisit(Screening $screening, TicketType $ticketType, PricingService $pricing): void
     {
         $seat = $this->pickSeat($screening);
-        $amount = $this->seatAmount($screening, $seat, $ticketType);
+        $amount = $this->seatAmount($pricing, $screening, $seat, $ticketType);
         $purchasedAt = $screening->starts_at->subDay();
         $checkedInAt = $screening->starts_at->addMinutes(5);
         $guest = SeedConfig::GUEST_NAMES[0];
@@ -233,10 +238,10 @@ class GionReservationSeeder extends Seeder
     /**
      * 会員・決済済み・未来（販売期間内）・未入場の予約を1件作成する（QRコード表示の確認用）。
      */
-    private function seedUpcomingReservation(Screening $screening, User $member, TicketType $ticketType): void
+    private function seedUpcomingReservation(Screening $screening, User $member, TicketType $ticketType, PricingService $pricing): void
     {
         $seat = $this->pickSeat($screening);
-        $amount = $this->seatAmount($screening, $seat, $ticketType);
+        $amount = $this->seatAmount($pricing, $screening, $seat, $ticketType);
         $purchasedAt = CarbonImmutable::now();
 
         $reservation = (new Reservation)->fill([
@@ -264,10 +269,13 @@ class GionReservationSeeder extends Seeder
      * 過去の上映回への予約とし、無料鑑賞券を使用した席にはスタンプを付与しない
      * （4.5.1-4）ことを、他の過去の来場（`seedPastVisit`）との対比で確認できるようにする。
      */
-    private function seedFreeTicketUsage(Screening $screening, User $member, TicketType $ticketType, FreeTicket $freeTicket): void
+    private function seedFreeTicketUsage(Screening $screening, User $member, TicketType $ticketType, FreeTicket $freeTicket, PricingService $pricing): void
     {
         $seat = $this->pickSeat($screening);
-        $amount = $this->seatAmount($screening, $seat, $ticketType, freeTicketApplied: true);
+        // 実際に発行した券（$freeTicket）を PricingService へ渡す。券種価格を
+        // ゼロへ手作業で置き換えると 4.5.2 の適用ロジック（1席分の券種価格のみを
+        // 無料にし追加料金は残す）をこのシーダーが別に実装することになる（旧12章 残課題7）
+        $amount = $this->seatAmount($pricing, $screening, $seat, $ticketType, $freeTicket);
         // 発行（issued_at）より後、かつ上映開始以前になるよう、
         // 「上映2日前」と「発行時刻」のいずれか遅い方を購入時刻とする
         $purchasedAt = $freeTicket->issued_at->max($screening->starts_at->subDays(2));
@@ -305,10 +313,10 @@ class GionReservationSeeder extends Seeder
      * 予約されない）。作成日時は決済フローの途中で止まっている想定のため
      * 実行時刻のままでよく、`created_at` を明示しない。
      */
-    private function seedPendingReservation(Screening $screening, TicketType $ticketType): void
+    private function seedPendingReservation(Screening $screening, TicketType $ticketType, PricingService $pricing): void
     {
         $seat = $this->pickSeat($screening);
-        $amount = $this->seatAmount($screening, $seat, $ticketType);
+        $amount = $this->seatAmount($pricing, $screening, $seat, $ticketType);
         $guest = SeedConfig::GUEST_NAMES[1];
 
         Reservation::create([
@@ -330,10 +338,10 @@ class GionReservationSeeder extends Seeder
      * pending と同様、座席は確保しない（6.4.2）。`pickSeat()` は想定金額の
      * 算出のみに使う。
      */
-    private function seedExpiredReservation(Screening $screening, TicketType $ticketType): void
+    private function seedExpiredReservation(Screening $screening, TicketType $ticketType, PricingService $pricing): void
     {
         $seat = $this->pickSeat($screening);
-        $amount = $this->seatAmount($screening, $seat, $ticketType);
+        $amount = $this->seatAmount($pricing, $screening, $seat, $ticketType);
         $now = CarbonImmutable::now();
         $guest = SeedConfig::GUEST_NAMES[2];
 
@@ -401,11 +409,16 @@ class GionReservationSeeder extends Seeder
         return $reservationSeat;
     }
 
-    private function seatAmount(Screening $screening, Seat $seat, TicketType $ticketType, bool $freeTicketApplied = false): int
+    /**
+     * 1席分の金額（6.5.4）を `PricingService` で求める（工程5-h、旧12章 残課題7）。
+     *
+     * 件数が少数（1画面あたり最大10席程度）のため、`calculate()`（DB読み込み版）を
+     * そのまま使う。`ReservationSeeder`（約4.8万件の一括生成）と異なり、予約ごとの
+     * 追加クエリを避ける最適化は不要。
+     */
+    private function seatAmount(PricingService $pricing, Screening $screening, Seat $seat, TicketType $ticketType, ?FreeTicket $freeTicket = null): int
     {
-        $ticketPrice = $freeTicketApplied ? 0 : $ticketType->price;
-
-        return $ticketPrice + $screening->booking->surcharge + $seat->seatType->surcharge;
+        return $pricing->calculate($screening, [$seat->id => $ticketType->id], $freeTicket)->total();
     }
 
     private function pickSeat(Screening $screening): Seat

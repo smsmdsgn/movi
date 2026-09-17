@@ -8,6 +8,7 @@ use App\Models\Reservation;
 use App\Models\ReservationSeat;
 use App\Models\Stamp;
 use App\Models\Theater;
+use App\Models\TicketType;
 use App\Models\User;
 use Database\Seeders\GionReservationSeeder;
 use Database\Seeders\MasterDataSeeder;
@@ -111,6 +112,38 @@ test('past visits grant a stamp regardless of check-in, and all five exchange fo
     $stampedReservationIds = $stamps->pluck('reservation_id');
     $noShowExists = Reservation::whereIn('id', $stampedReservationIds)->whereNull('checked_in_at')->exists();
     expect($noShowExists)->toBeTrue();
+});
+
+test('non-free-ticket reservations use PricingService for their amount (工程5-h)', function () {
+    // seedGionFixtureScreenings() の過去上映回はすべて10:00固定（レイトショー対象外）
+    // のため、通常の1席あたりの金額（券種価格＋上映編成の追加料金＋座席種別の追加料金）
+    // と一致するはずである。seatAmount() の引数順の取り違えのような配線ミスを検出する。
+    seedGionFixtureScreenings();
+    createGionTestMember();
+
+    Artisan::call('db:seed', ['--class' => GionReservationSeeder::class, '--force' => true]);
+
+    $adult = TicketType::where('name', SeedConfig::TICKET_TYPE_ADULT)->firstOrFail();
+
+    // 無料鑑賞券使用（総額500円に固定、別テストで検証済み）を除く、来場・キャンセル・
+    // 非会員入場済みの予約を対象にする。
+    $reservations = Reservation::whereNull('free_ticket_id')
+        ->whereHas('screening', fn ($q) => $q->where('starts_at', '<', now()))
+        ->whereIn('status', [ReservationStatus::Paid, ReservationStatus::Cancelled])
+        ->with('seats')
+        ->get();
+
+    expect($reservations)->not->toBeEmpty();
+
+    foreach ($reservations as $reservation) {
+        foreach ($reservation->seats as $seat) {
+            // 座席種別の追加料金は makeSeatsWithSurcharge($theater, 10, 300) により一律300円、
+            // 上映編成の追加料金は makeScreenings(..., bookingSurcharge: 200) により一律200円。
+            expect($seat->amount)->toBe($adult->price + 200 + 300);
+        }
+
+        expect($reservation->total_amount)->toBe($reservation->seats->sum('amount'));
+    }
 });
 
 test('the free ticket usage reservation waives only the ticket price and grants no stamp', function () {

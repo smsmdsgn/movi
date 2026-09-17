@@ -11,6 +11,7 @@ use App\Models\Seat;
 use App\Models\Stamp;
 use App\Models\TicketType;
 use App\Models\User;
+use App\Services\PricingService;
 use Carbon\CarbonImmutable;
 use Database\Seeders\Concerns\DeterministicRandom;
 use Illuminate\Database\Seeder;
@@ -35,8 +36,10 @@ use RuntimeException;
  *
  * 上映回ごとに座席稼働率を5〜80%の範囲でランダムに設定し（9.2）、
  * 稼働させる座席を1〜8席（4.3.4の上限）単位の予約へ分割する。
- * 金額は6.5.4の基本式（券種価格＋上映編成の追加料金＋座席種別の追加料金）のみを用い、
- * 6.5.2の割引（レイトショー・ペア割）はシーダーでは再現しない（9.3追記表参照）。
+ * 金額は `PricingService::calculateResolved()` で求める（工程5-h、旧12章 残課題7）。
+ * 座席の追加料金は起動時に館単位でキャッシュ済みのため（`cacheSeatSurcharges()`）、
+ * `calculate()` の DB 読み込み版ではなく解決済み版を使い、約4.8万件の生成で
+ * 予約ごとに座席・券種を再読み込みするクエリ増（6.5.2 / 13.4.5）を避ける。
  * すべて決済済み（`paid`）とし、過去の上映回の予約のみ `SeedConfig::RESERVATION_CHECKED_IN_PERCENT`
  * の確率で入場済みとする（9.2）。`pending` / `expired` / `cancelled`、無料鑑賞券の使用は
  * シーダーでは生成しない。スタンプは4.5.1-2の5個到達時の無料鑑賞券発行を再現せず、
@@ -88,7 +91,7 @@ class ReservationSeeder extends Seeder
     /** @var array<int, array{reservation_no: string, user_id: int, created_at: CarbonImmutable}> */
     private array $stampEntries = [];
 
-    public function run(): void
+    public function run(PricingService $pricing): void
     {
         $this->cacheSeatSurcharges();
 
@@ -100,6 +103,10 @@ class ReservationSeeder extends Seeder
         }
 
         $this->assertTicketTypeWeightsAreValid($ticketTypes);
+
+        // calculateResolved() が求める id => TicketType の形。display_order 順の
+        // Collection（$ticketTypes、pickTicketType() の重み付き抽選に使う）とは別に持つ。
+        $ticketTypesById = $ticketTypes->keyBy('id')->all();
 
         // 冪等性を上映回単位（whereDoesntHave）にしたことで、既存データがある状態からの
         // 増分実行が実際に発生しうる。以下の3つはシーダー実行内のカウントだけでは
@@ -126,9 +133,9 @@ class ReservationSeeder extends Seeder
             ->whereDoesntHave('reservations')
             ->with('booking')
             ->orderBy('id')
-            ->chunkById(500, function (Collection $screenings) use ($memberIds, $ticketTypes, $now) {
+            ->chunkById(500, function (Collection $screenings) use ($memberIds, $ticketTypes, $ticketTypesById, $now, $pricing) {
                 foreach ($screenings as $screening) {
-                    $this->generateForScreening($screening, $memberIds, $ticketTypes, $now);
+                    $this->generateForScreening($screening, $memberIds, $ticketTypes, $ticketTypesById, $now, $pricing);
                 }
             });
 
@@ -171,8 +178,9 @@ class ReservationSeeder extends Seeder
     /**
      * @param  array<int, int>  $memberIds
      * @param  Collection<int, TicketType>  $ticketTypes
+     * @param  array<int, TicketType>  $ticketTypesById
      */
-    private function generateForScreening(Screening $screening, array $memberIds, Collection $ticketTypes, CarbonImmutable $now): void
+    private function generateForScreening(Screening $screening, array $memberIds, Collection $ticketTypes, array $ticketTypesById, CarbonImmutable $now, PricingService $pricing): void
     {
         $seatSurcharges = $this->seatSurchargeByTheater[$screening->theater_id] ?? [];
 
@@ -191,6 +199,9 @@ class ReservationSeeder extends Seeder
 
         $isPast = $screening->starts_at->lt($now);
         $bookingSurcharge = $screening->booking->surcharge;
+        // レイトショーの判定（6.5.2）は上映回単位で変わらないため、グループごとに
+        // 求め直さない。`PricingService::isLateShow()` を呼び、判定式を複製しない。
+        $isLateShow = $pricing->isLateShow($screening);
 
         $offset = 0;
         $groupIndex = 0;
@@ -208,10 +219,13 @@ class ReservationSeeder extends Seeder
                 $seatSurcharges,
                 $memberIds,
                 $ticketTypes,
+                $ticketTypesById,
                 $isPast,
+                $isLateShow,
                 $bookingSurcharge,
                 $now,
-                $groupIndex
+                $groupIndex,
+                $pricing,
             );
             $groupIndex++;
 
@@ -226,6 +240,7 @@ class ReservationSeeder extends Seeder
      * @param  array<int, int>  $seatSurcharges  seatId => 座席種別の追加料金
      * @param  array<int, int>  $memberIds
      * @param  Collection<int, TicketType>  $ticketTypes
+     * @param  array<int, TicketType>  $ticketTypesById
      */
     private function buildReservation(
         Screening $screening,
@@ -233,10 +248,13 @@ class ReservationSeeder extends Seeder
         array $seatSurcharges,
         array $memberIds,
         Collection $ticketTypes,
+        array $ticketTypesById,
         bool $isPast,
+        bool $isLateShow,
         int $bookingSurcharge,
         CarbonImmutable $now,
         int $groupIndex,
+        PricingService $pricing,
     ): void {
         $seed = "{$screening->id}-{$groupIndex}";
         $reservationNo = $this->nextReservationNo();
@@ -263,19 +281,30 @@ class ReservationSeeder extends Seeder
             $guestPhone = '090'.str_pad((string) ($this->guestSequence % 100_000_000), 8, '0', STR_PAD_LEFT);
         }
 
-        $totalAmount = 0;
-        $seatRows = [];
+        $seatSelections = [];
 
         foreach ($seatIds as $i => $seatId) {
             $ticketType = $this->pickTicketType($ticketTypes, "ticket-{$seed}-{$i}");
-            $amount = $ticketType->price + $bookingSurcharge + $seatSurcharges[$seatId];
-            $totalAmount += $amount;
+            $seatSelections[$seatId] = $ticketType->id;
+        }
 
+        // 座席・券種はすでに読み込み済み（`cacheSeatSurcharges()` / 呼び出し元の
+        // `TicketType::query()->get()`）のため、DB読み込み版の `calculate()` ではなく
+        // `calculateResolved()` を使う。予約ごとに座席・券種を再読み込みするクエリ増を避ける
+        // （約4.8万件の一括生成、旧12章 残課題7）。1席あたりの金額は
+        // `calculateResolved()` の内部（`buildRegularAmounts()`）が組み立てるため、
+        // ここでは追加料金・券種マスタという素材のみを渡す。
+        $breakdown = $pricing->calculateResolved($seatSelections, $seatSurcharges, $bookingSurcharge, $ticketTypesById, $isLateShow);
+
+        $totalAmount = $breakdown->total();
+        $seatRows = [];
+
+        foreach ($breakdown->seats as $seatPrice) {
             $seatRows[] = [
                 'screening_id' => $screening->id,
-                'seat_id' => $seatId,
-                'ticket_type_id' => $ticketType->id,
-                'amount' => $amount,
+                'seat_id' => $seatPrice->seatId,
+                'ticket_type_id' => $seatPrice->ticketTypeId,
+                'amount' => $seatPrice->amount(),
             ];
         }
 

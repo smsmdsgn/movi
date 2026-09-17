@@ -5,7 +5,7 @@ namespace App\Services;
 use App\Enums\Discount;
 
 /**
- * 予約1件分の金額（13.4.5）。`PricingService::calculate()` が組み立てる。
+ * 予約1件分の金額（13.4.5）。`PricingService::calculate()` / `calculateResolved()` が組み立てる。
  *
  * 小計・割引額・支払金額は席ごとの内訳（`SeatPrice`）から導く。合計を別に保持すると、
  * 内訳と食い違った値を持てるようになる。

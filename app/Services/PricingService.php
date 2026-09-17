@@ -59,27 +59,91 @@ class PricingService
         // 例外になる。呼び出し側の取得方法に依存しないよう、ここで冪等に読み込む。
         $screening->loadMissing('booking');
 
-        // 座席IDの昇順に整える。ペア割で「余りの1枚」が出る場合に、どの席へ割引が付くかを
-        // 決定的にするため（大人券種の価格は同一のため合計は変わらないが、
-        // `t_reservation_seats.amount` は席ごとに保存される。6.5.5）。
-        ksort($seatSelections);
-
         $seats = $this->loadSeats(array_keys($seatSelections));
         $ticketTypes = $this->loadTicketTypes(array_values($seatSelections));
 
+        $seatSurcharges = [];
+
+        foreach ($seats as $seatId => $seat) {
+            $seatSurcharges[$seatId] = $seat->seatType->surcharge;
+        }
+
+        return $this->calculateResolved($seatSelections, $seatSurcharges, $screening->booking->surcharge, $ticketTypes, $this->isLateShow($screening), $freeTicket);
+    }
+
+    /**
+     * 解決済みの座席・券種から求める（DBへは問い合わせない）。`calculate()` と
+     * 同じ割引判定（6.5.2）・下限（6.5.2-6）を共有する、この計算の唯一の実体。
+     *
+     * **クライアントの入力を経由する画面は使わない。** 呼び出し側が座席・追加料金・
+     * 券種価格を権威ある値（マスタ）から自ら計算していることを前提とする（17章）。
+     * 一括生成するシーダー（9.3追記表、旧12章 残課題7）のように、呼び出し側が
+     * 座席・券種をすでにまとめて読み込んでおり、予約ごとに `calculate()` の
+     * 追加クエリ（座席・券種の再読み込み）を払う理由が無い場合に使う。
+     *
+     * **1席あたりの最終金額を直接受け取らない。** 引数は追加料金・券種マスタという
+     * 「素材」に限り、金額そのもの（`calculate()` が内部で組み立てる合算値）は
+     * このメソッドの外に出さない。13.4.5 の「金額を引数に取らない」という
+     * `calculate()` の不変条件を、可能な限りこちらにも及ぼすため。
+     *
+     * @param  array<int, int>  $seatSelections  座席ID => 券種ID
+     * @param  array<int, int>  $seatSurcharges  座席ID => 座席種別の追加料金（6.5.3）
+     * @param  int  $bookingSurcharge  上映編成の追加料金（6.5.3）。対象の全席で共通
+     * @param  array<int, TicketType>  $ticketTypes  券種ID => TicketType（`name` と `price` を使う）
+     * @param  bool  $isLateShow  対象の上映回がレイトショーの対象か（6.5.2。開始時刻が20:00以降。`isLateShow()` で求める）
+     *
+     * @throws InvalidArgumentException 存在しない座席IDまたは券種IDが含まれる場合
+     */
+    public function calculateResolved(array $seatSelections, array $seatSurcharges, int $bookingSurcharge, array $ticketTypes, bool $isLateShow, ?FreeTicket $freeTicket = null): PriceBreakdown
+    {
+        if ($seatSelections === []) {
+            return new PriceBreakdown([]);
+        }
+
+        // 座席IDの昇順に整える。ペア割で「余りの1枚」が出る場合に、どの席へ割引が付くかを
+        // 決定的にするため（大人券種の価格は同一のため合計は変わらないが、
+        // `t_reservation_seats.amount` は席ごとに保存される。6.5.5）。呼び出し側が
+        // 未整列で渡しても不変条件が崩れないよう、ここで整える。
+        ksort($seatSelections);
+
+        $regularAmounts = $this->buildRegularAmounts($seatSelections, $seatSurcharges, $bookingSurcharge, $ticketTypes);
+
+        if ($freeTicket !== null && $this->isUsable($freeTicket)) {
+            return $this->applyFreeTicket($seatSelections, $regularAmounts, $ticketTypes, $isLateShow, $freeTicket);
+        }
+
+        return $this->applyBestDiscount($seatSelections, $regularAmounts, $ticketTypes, $isLateShow);
+    }
+
+    /**
+     * 1席あたりの通常金額（6.5.4「1席あたり（通常）」= 券種価格 + 上映編成の追加料金 +
+     * 座席種別の追加料金）を求める。`calculate()` と `calculateResolved()` の
+     * 双方が通る、この式の唯一の実体。
+     *
+     * @param  array<int, int>  $seatSelections  座席ID => 券種ID
+     * @param  array<int, int>  $seatSurcharges  座席ID => 座席種別の追加料金
+     * @param  array<int, TicketType>  $ticketTypes  券種ID => TicketType
+     * @return array<int, int> 座席ID => 1席あたりの通常金額
+     *
+     * @throws InvalidArgumentException 存在しない座席IDまたは券種IDが含まれる場合
+     */
+    private function buildRegularAmounts(array $seatSelections, array $seatSurcharges, int $bookingSurcharge, array $ticketTypes): array
+    {
         $regularAmounts = [];
 
         foreach ($seatSelections as $seatId => $ticketTypeId) {
-            $regularAmounts[$seatId] = $ticketTypes[$ticketTypeId]->price
-                + $screening->booking->surcharge
-                + $seats[$seatId]->seatType->surcharge;
+            if (! array_key_exists($seatId, $seatSurcharges)) {
+                throw new InvalidArgumentException('存在しない座席が含まれています。');
+            }
+
+            if (! array_key_exists($ticketTypeId, $ticketTypes)) {
+                throw new InvalidArgumentException('存在しない券種が含まれています。');
+            }
+
+            $regularAmounts[$seatId] = $ticketTypes[$ticketTypeId]->price + $bookingSurcharge + $seatSurcharges[$seatId];
         }
 
-        if ($freeTicket !== null && $this->isUsable($freeTicket)) {
-            return $this->applyFreeTicket($screening, $seatSelections, $regularAmounts, $ticketTypes, $freeTicket);
-        }
-
-        return $this->applyBestDiscount($screening, $seatSelections, $regularAmounts, $ticketTypes);
+        return $regularAmounts;
     }
 
     /**
@@ -92,12 +156,12 @@ class PricingService
      * @param  array<int, int>  $regularAmounts  座席ID => 割引前の金額
      * @param  array<int, TicketType>  $ticketTypes
      */
-    private function applyBestDiscount(Screening $screening, array $seatSelections, array $regularAmounts, array $ticketTypes): PriceBreakdown
+    private function applyBestDiscount(array $seatSelections, array $regularAmounts, array $ticketTypes, bool $isLateShow): PriceBreakdown
     {
         /** @var array<string, list<SeatPrice>> $candidates */
         $candidates = [];
 
-        if ($this->isLateShow($screening)) {
+        if ($isLateShow) {
             $candidates[Discount::LateShow->value] = $this->lateShowPrices($seatSelections, $regularAmounts);
         }
 
@@ -224,7 +288,7 @@ class PricingService
      * @param  array<int, int>  $regularAmounts  座席ID => 割引前の金額
      * @param  array<int, TicketType>  $ticketTypes
      */
-    private function applyFreeTicket(Screening $screening, array $seatSelections, array $regularAmounts, array $ticketTypes, FreeTicket $freeTicket): PriceBreakdown
+    private function applyFreeTicket(array $seatSelections, array $regularAmounts, array $ticketTypes, bool $isLateShow, FreeTicket $freeTicket): PriceBreakdown
     {
         $coveredSeatId = null;
         $coveredPrice = 0;
@@ -239,7 +303,7 @@ class PricingService
         // 券種価格が全席0円なら無料にできる分が無い。券を消費せず通常の割引判定へ落とす
         // （A-07 の下限は1円だがシーダー・直接INSERTでは0円を作れる）。
         if ($coveredSeatId === null) {
-            return $this->applyBestDiscount($screening, $seatSelections, $regularAmounts, $ticketTypes);
+            return $this->applyBestDiscount($seatSelections, $regularAmounts, $ticketTypes, $isLateShow);
         }
 
         $prices = [];
@@ -254,8 +318,13 @@ class PricingService
         return new PriceBreakdown($prices, null, $freeTicket->id);
     }
 
-    /** レイトショーの対象か（6.5.2）。判定は上映回の開始時刻による。 */
-    private function isLateShow(Screening $screening): bool
+    /**
+     * レイトショーの対象か（6.5.2）。判定は上映回の開始時刻による。
+     *
+     * `calculate()` が内部で使うほか、`calculateResolved()` の呼び出し側
+     * （一括生成するシーダー等）が同じ判定式を複製せずに済むよう公開する。
+     */
+    public function isLateShow(Screening $screening): bool
     {
         return $screening->starts_at->hour >= self::LATE_SHOW_FROM_HOUR;
     }
