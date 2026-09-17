@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use Livewire\Livewire;
+use Stripe\StripeClient;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -22,7 +23,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Stripe クライアント（8.2）。`StripeService` からのみ解決する。テストでは
+        // 差し替えて実際の通信を行わない。シークレットキー（15.1）はここでのみ読み、
+        // 画面・ログへ渡る経路を作らない（17.3-6 / 17.9-1）。
+        $this->app->singleton(StripeClient::class, function (): StripeClient {
+            $secret = config('services.stripe.secret');
+
+            return new StripeClient(is_string($secret) ? trim($secret) : '');
+        });
     }
 
     /**

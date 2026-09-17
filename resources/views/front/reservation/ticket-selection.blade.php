@@ -104,19 +104,19 @@
                     <dl class="mt-3 space-y-2 text-sm">
                         <div class="flex justify-between">
                             <dt>{{ __('front.reservation.tickets.subtotal') }}</dt>
-                            <dd class="tabular-nums">{{ __('front.reservation.tickets.yen', ['amount' => number_format($breakdown->subtotal())]) }}</dd>
+                            <dd class="tabular-nums">{{ __('front.reservation.yen', ['amount' => number_format($breakdown->subtotal())]) }}</dd>
                         </div>
 
                         @if ($breakdown->discount !== null)
                             <div class="flex justify-between text-red-900">
                                 <dt>{{ $breakdown->discount->label() }}</dt>
-                                <dd class="tabular-nums">−{{ __('front.reservation.tickets.yen', ['amount' => number_format($breakdown->discountAmount())]) }}</dd>
+                                <dd class="tabular-nums">−{{ __('front.reservation.yen', ['amount' => number_format($breakdown->discountAmount())]) }}</dd>
                             </div>
                         @endif
 
                         <div class="flex justify-between border-t border-stone-300 pt-2 text-base font-bold">
                             <dt>{{ __('front.reservation.tickets.total') }}</dt>
-                            <dd class="tabular-nums">{{ __('front.reservation.tickets.yen', ['amount' => number_format($breakdown->total())]) }}</dd>
+                            <dd class="tabular-nums">{{ __('front.reservation.yen', ['amount' => number_format($breakdown->total())]) }}</dd>
                         </div>
                     </dl>
                 @endif

@@ -520,6 +520,34 @@ function agreeToTerms(Screening $screening): void
 }
 
 /*
+ * 非会員のお客様情報（P-34、4.3.6）を入力済みにする。P-35 以降は非会員の入力が無いと
+ * 先へ進めない（4.3.14、旧12章 残課題25-a）ため、その段階を検証するテストの前提になる。
+ */
+function enterGuestInfo(Screening $screening): void
+{
+    app(ReservationDraft::class)->putGuest($screening, [
+        'name' => '祇園　太郎',
+        'name_kana' => 'ギオン　タロウ',
+        'phone' => '0751234567',
+        'email' => 'guest@example.test',
+    ]);
+}
+
+/**
+ * 券種の割り当て（P-35、7.10）を済ませた状態にする。全席に同じ券種を充てる。
+ */
+function assignTickets(Screening $screening, TicketType $ticketType, Seat ...$seats): void
+{
+    $tickets = [];
+
+    foreach ($seats as $seat) {
+        $tickets[$seat->id] = $ticketType->id;
+    }
+
+    app(ReservationDraft::class)->putTickets($screening, $tickets);
+}
+
+/*
  * HTTP テスト用。`$this->get()` はテストプロセスとは別のセッションで動くため、
  * `withSession()` へ渡す形で同意済みの状態を組み立てる。
  *

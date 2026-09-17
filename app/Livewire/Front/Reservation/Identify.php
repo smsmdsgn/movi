@@ -93,6 +93,15 @@ class Identify extends Component
     }
 
     /**
+     * お客様情報（P-34）を前提としない。本画面は非会員がその入力へ進む導線そのもの
+     * であり、前提に加えると到達した非会員を常に P-34 へ送り返すことになる（4.3.14）。
+     */
+    protected function requiresGuestInput(): bool
+    {
+        return false;
+    }
+
+    /**
      * 券種選択（P-35、7.10）へ送る。会員・非会員のいずれの経路も P-35 で合流する（7.18）。
      */
     private function forwardToTickets(): void

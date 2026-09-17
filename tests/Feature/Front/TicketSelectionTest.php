@@ -17,7 +17,8 @@ use Livewire\Livewire;
  */
 
 /**
- * 先へ進める前提（座席の保持・利用規約への同意）を満たした上映回を用意する。
+ * 先へ進める前提（座席の保持・利用規約への同意・非会員のお客様情報）を満たした
+ * 上映回を用意する（4.3.14）。
  *
  * @return array{screening: Screening, seats: list<Seat>, theater: Theater}
  */
@@ -26,6 +27,7 @@ function readyForTicketSelection(int $seatCount = 2): array
     $fixture = makeReservationFixture($seatCount);
     holdSeatsForScreening($fixture['screening'], null, ...$fixture['seats']);
     agreeToTerms($fixture['screening']);
+    enterGuestInfo($fixture['screening']);
 
     return $fixture;
 }
@@ -82,9 +84,9 @@ it('小計・割引額・支払金額を表示する（7.10-3 / 7.10-5）', func
     Livewire::test(TicketSelection::class, ['screening' => $screening])
         ->set('selections.'.$seats[0]->id, (string) $adult->id)
         ->set('selections.'.$seats[1]->id, (string) $adult->id)
-        ->assertSee(__('front.reservation.tickets.yen', ['amount' => '4,000']))
+        ->assertSee(__('front.reservation.yen', ['amount' => '4,000']))
         ->assertSee(Discount::Pair->label())
-        ->assertSee(__('front.reservation.tickets.yen', ['amount' => '3,000']));
+        ->assertSee(__('front.reservation.yen', ['amount' => '3,000']));
 });
 
 it('券種を選んでいない座席があると次へ進めない（7.10）', function () {
@@ -169,6 +171,23 @@ it('保持していない座席に券種を割り当てても保存しない（1
     ]);
 });
 
+it('券種を確定し直すと、用意済みの支払方法を捨てる（4.3.14）', function () {
+    // P-36 でカードを用意した後に券種を変えると支払金額が変わる。前の内容のために
+    // 用意した PaymentMethod を持ち越さない。
+    ['screening' => $screening, 'seats' => $seats] = readyForTicketSelection();
+    $adult = adultTicket(2000);
+    $student = studentTicket(1500);
+    app(ReservationDraft::class)->putPaymentMethod($screening, 'pm_card_visa');
+
+    Livewire::test(TicketSelection::class, ['screening' => $screening])
+        ->set('selections.'.$seats[0]->id, (string) $adult->id)
+        ->set('selections.'.$seats[1]->id, (string) $student->id)
+        ->call('submit')
+        ->assertRedirect(route('front.reservation.payment', ['id' => $screening->id]));
+
+    expect(app(ReservationDraft::class)->paymentMethodId($screening->id))->toBeNull();
+});
+
 it('記録済みの割り当てを書き戻す（P-36 から戻った場合）', function () {
     ['screening' => $screening, 'seats' => $seats] = readyForTicketSelection();
     $adult = adultTicket(2000);
@@ -229,6 +248,25 @@ it('座席を保持していない場合は選択を求めず、座席選択へ�
         ->assertSee(route('front.reservation.seats', ['id' => $screening->id]))
         ->call('submit')
         ->assertNoRedirect();
+});
+
+it('非会員がお客様情報（P-34）を入力していない場合は選択を求めず、入力画面へ戻す（4.3.14）', function () {
+    // P-32 の後に P-35 のURLへ直接到達した非会員。連絡先を持たないまま決済へ進める
+    // 経路を塞ぐ（旧12章 残課題25-a）。
+    ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
+    holdSeatsForScreening($screening, null, ...$seats);
+    agreeToTerms($screening);
+    $adult = adultTicket(2000);
+
+    Livewire::test(TicketSelection::class, ['screening' => $screening])
+        ->assertSee(__('front.reservation.errors.customer_info_required'))
+        ->assertDontSee(__('front.reservation.tickets.proceed'))
+        ->assertSee(route('front.reservation.customer', ['id' => $screening->id]))
+        ->set('selections.'.$seats[0]->id, (string) $adult->id)
+        ->call('submit')
+        ->assertNoRedirect();
+
+    expect(app(ReservationDraft::class)->tickets($screening->id))->toBe([]);
 });
 
 it('保持中の座席が期限切れになると確定できない（6.4.1-3）', function () {

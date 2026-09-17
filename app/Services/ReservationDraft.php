@@ -19,8 +19,13 @@ use Illuminate\Support\Facades\Session;
  *     'agreed_at'    => string|null, // P-32 で利用規約に同意した時刻（ISO 8601）
  *     'guest'        => array|null,  // P-34 で入力したお客様情報（非会員）
  *     'tickets'      => array|null,  // P-35 で割り当てた券種（座席ID => 券種ID）
+ *     'payment_method_id' => string|null, // P-36 で用意した Stripe の PaymentMethod のID
  * ]
  * ```
+ *
+ * **カード情報は持たない。** 保持するのは Stripe がトークン化した PaymentMethod のID
+ * だけであり、ブランド・下4桁を含むカードの情報はセッションにも置かない（17.3-1 / 17.4.1）。
+ * 表示に必要になった時点で Stripe から引き直す。
  *
  * **上映回が変われば丸ごと捨てる。** 別の回を選び直した利用者に、前の回で得た同意や
  * 入力を引き継がせない（12章 残課題25 が求める「上映回が変われば無効とする」）。
@@ -36,7 +41,7 @@ use Illuminate\Support\Facades\Session;
  * モデルを要求すると削除済みの回で読み出せなくなる（4.3.10）。
  *
  * @phpstan-type GuestInput array{name: string, name_kana: string, phone: string, email: string}
- * @phpstan-type DraftState array{screening_id: int, agreed_at: string|null, guest: GuestInput|null, tickets: array<int, int>|null}
+ * @phpstan-type DraftState array{screening_id: int, agreed_at: string|null, guest: GuestInput|null, tickets: array<int, int>|null, payment_method_id: string|null}
  */
 class ReservationDraft
 {
@@ -102,6 +107,10 @@ class ReservationDraft
         $draft = $this->draftFor($screening->id);
         $draft['tickets'] = $tickets;
 
+        // **支払方法は券種と一緒に捨てる。** 券種を選び直すと支払金額が変わるため、
+        // 前の内容のために用意した PaymentMethod を持ち越さない（P-36 で入れ直す）。
+        $draft['payment_method_id'] = null;
+
         $this->put($draft);
     }
 
@@ -123,6 +132,32 @@ class ReservationDraft
     }
 
     /**
+     * 決済に用いる PaymentMethod のID を記録する（P-36、7.11）。
+     *
+     * **カードそのものではなく Stripe が発行した参照である**（17.3-1）。課金は予約確認
+     * （P-37）で行うため、この時点では「どのカードで支払うか」だけを持ち越す。
+     */
+    public function putPaymentMethod(Screening $screening, string $paymentMethodId): void
+    {
+        $draft = $this->draftFor($screening->id);
+        $draft['payment_method_id'] = $paymentMethodId;
+
+        $this->put($draft);
+    }
+
+    /**
+     * 記録済みの PaymentMethod のID。上映回が一致しない場合は null を返す。
+     */
+    public function paymentMethodId(int $screeningId): ?string
+    {
+        $draft = $this->current();
+
+        return $draft !== null && $draft['screening_id'] === $screeningId
+            ? $draft['payment_method_id']
+            : null;
+    }
+
+    /**
      * 現在の記録。形式が想定と異なる場合は null を返す。
      *
      * セッションの中身は本クラスだけが書くが、`SESSION_LIFETIME`（既定120分）をまたいだ
@@ -139,7 +174,7 @@ class ReservationDraft
             return null;
         }
 
-        foreach (['agreed_at', 'guest', 'tickets'] as $key) {
+        foreach (['agreed_at', 'guest', 'tickets', 'payment_method_id'] as $key) {
             if (! array_key_exists($key, $draft)) {
                 return null;
             }
@@ -154,6 +189,10 @@ class ReservationDraft
         }
 
         if ($draft['tickets'] !== null && ! $this->isTicketsShape($draft['tickets'])) {
+            return null;
+        }
+
+        if ($draft['payment_method_id'] !== null && ! is_string($draft['payment_method_id'])) {
             return null;
         }
 
@@ -214,7 +253,13 @@ class ReservationDraft
             return $draft;
         }
 
-        return ['screening_id' => $screeningId, 'agreed_at' => null, 'guest' => null, 'tickets' => null];
+        return [
+            'screening_id' => $screeningId,
+            'agreed_at' => null,
+            'guest' => null,
+            'tickets' => null,
+            'payment_method_id' => null,
+        ];
     }
 
     /**

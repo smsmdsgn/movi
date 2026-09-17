@@ -59,6 +59,11 @@
     @fonts
     @vite(['resources/css/app.css'])
     @livewireStyles
+
+    {{-- 画面固有の外部スクリプト（決済 P-36 の Stripe.js 等）。`@livewireScripts` より前に
+         置き、`defer` の実行順（文書順）で Alpine の初期化より先に読み込ませる。
+         スタックは本レイアウトの描画より前にスロット側で積まれるため、head で受けられる。 --}}
+    @stack('head')
 </head>
 <body class="flex min-h-screen flex-col bg-white text-stone-900">
     <x-front.header />

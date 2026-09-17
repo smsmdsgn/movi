@@ -198,6 +198,15 @@ class CustomerInfo extends Component
     }
 
     /**
+     * お客様情報（P-34）を前提としない。本画面がその入力を受け取る画面であり、
+     * 前提に加えると初回の到達で自分自身へ送り返すことになる（4.3.14）。
+     */
+    protected function requiresGuestInput(): bool
+    {
+        return false;
+    }
+
+    /**
      * 券種選択（P-35、7.10）へ送る。会員・非会員のいずれの経路も P-35 で合流する（7.18）。
      */
     private function forwardToTickets(): void

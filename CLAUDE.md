@@ -27,8 +27,8 @@ Laravel 13 / PHP 8.4 / MariaDB 10.11 / Livewire 4 / Alpine.js / Tailwind CSS
 
 ```
 vendor/bin/pint --dirty
-vendor/bin/phpstan analyse
-php artisan test
+vendor/bin/phpstan analyse --memory-limit=1G
+php -d memory_limit=1G vendor/bin/pest
 git diff --stat
 ```
 
@@ -173,6 +173,13 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 # Deployment
 
 - Laravel can be deployed using [Laravel Cloud](https://cloud.laravel.com/), which is the fastest way to deploy and scale production Laravel applications.
+
+=== herd rules ===
+
+# Laravel Herd
+
+- The application is served by Laravel Herd at `https?://[kebab-case-project-dir].test`. Use the `get-absolute-url` tool to generate valid URLs. Never run commands to serve the site. It is always available.
+- Use the `herd` CLI to manage services, PHP versions, and sites (e.g. `herd sites`, `herd services:start <service>`, `herd php:list`). Run `herd list` to discover all available commands.
 
 === tests rules ===
 
