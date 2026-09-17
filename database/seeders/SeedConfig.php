@@ -6,6 +6,7 @@ use App\Enums\BannerPosition;
 use App\Enums\SeatDisplayClass;
 use App\Models\Cinema;
 use App\Models\Screening;
+use App\Models\TicketType;
 
 /**
  * シーダーの生成規模・固定構成を定数として集約する（docs/design.md 6.3.3 / 9章、13章）。
@@ -173,7 +174,7 @@ class SeedConfig
      * @var array<int, array{name: string, price: int, condition: string|null}>
      */
     public const array TICKET_TYPES = [
-        ['name' => '大人', 'price' => 2000, 'condition' => '18歳以上'],
+        ['name' => TicketType::ADULT_NAME, 'price' => 2000, 'condition' => '18歳以上'],
         ['name' => '学生', 'price' => 1500, 'condition' => '大学・専門学校。要学生証'],
         ['name' => '高校生以下', 'price' => 1000, 'condition' => null],
         ['name' => 'シニア', 'price' => 1500, 'condition' => '65歳以上'],
@@ -354,8 +355,13 @@ class SeedConfig
      */
     public const array RESERVATION_GROUP_SIZES = [1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 6, 7, 8];
 
-    /** 券種マスタ（TICKET_TYPES）の「大人」の名称。位置（インデックス）ではなく名称で参照するための定数。 */
-    public const string TICKET_TYPE_ADULT = '大人';
+    /**
+     * 券種マスタ（TICKET_TYPES）の「大人」の名称。位置（インデックス）ではなく名称で参照するための定数。
+     *
+     * 定義は `TicketType::ADULT_NAME` に置く。ペア割（6.5.2）の判定が同じ名称に依存するため、
+     * シーダーとアプリケーションで二重に定義しない。
+     */
+    public const string TICKET_TYPE_ADULT = TicketType::ADULT_NAME;
 
     /**
      * 券種の選択比率（%、合計100。TICKET_TYPES の名称をキーとする）。

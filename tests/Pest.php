@@ -388,7 +388,7 @@ function createTicketType(): TicketType
 {
     // 同一テスト内で複数回呼べるよう冪等にする（`m_ticket_types.name` は一意）。
     return TicketType::firstOrCreate(
-        ['name' => '大人'],
+        ['name' => TicketType::ADULT_NAME],
         ['price' => 2000, 'display_order' => 1],
     );
 }

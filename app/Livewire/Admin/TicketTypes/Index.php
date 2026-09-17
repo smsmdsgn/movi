@@ -19,7 +19,13 @@ use Livewire\Component;
  * （`SeedConfig::TICKET_TYPE_ADULT`、`TICKET_TYPE_WEIGHTS` のキー、
  * `ReservationSeeder`・`GionReservationSeeder`）ため、新規作成・削除に加えて
  * 券種名（`name`）・表示順（`display_order`）の変更も対象外とし、一覧と
- * `price`・`condition` の編集のみを実装する（4.8.6追記表）。`m_ticket_types` は
+ * `price`・`condition` の編集のみを実装する（4.8.6追記表）。
+ *
+ * **工程5-g 以降はアプリケーション本体も名称に依存する。** ペア割（6.5.2）の対象は
+ * `TicketType::ADULT_NAME` との名称一致で判別しており（13.4.5追記表）、改名を許すと
+ * 割引が無言で成立しなくなる。名称を編集可能にする場合は、先に券種へコードを与えること。
+ *
+ * `m_ticket_types` は
  * `cinema_id` を持たないチェーン共通のマスタであり（6.5「館ごとの料金差は設けず、
  * 全館共通とする」）`CinemaScope`（13.4.1）の対象外のため、館セレクタは設けない。
  *
