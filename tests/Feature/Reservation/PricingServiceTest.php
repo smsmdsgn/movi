@@ -4,7 +4,6 @@ use App\Enums\Discount;
 use App\Models\Screening;
 use App\Models\Seat;
 use App\Models\Theater;
-use App\Models\TicketType;
 use App\Services\PriceBreakdown;
 use App\Services\PricingService;
 use Carbon\CarbonImmutable;
@@ -33,29 +32,6 @@ function pricingFixture(int $seatCount = 4, int $bookingSurcharge = 0, int $seat
     [$screening] = makeScreenings($theater, [CarbonImmutable::now()->addDay()->setTime($hour, $minute)], $bookingSurcharge);
 
     return ['screening' => $screening, 'seats' => $seats];
-}
-
-/**
- * 名称と価格を指定して券種を作る（`m_ticket_types.name` は一意）。
- *
- * `firstOrCreate` にすると、既に同名の券種がある場合に `$price` が黙って無視され、
- * 金額の期待値の根拠が崩れる（「通るが検証していない」テストになる）。
- */
-function makeTicketType(string $name, int $price): TicketType
-{
-    return TicketType::updateOrCreate(['name' => $name], ['price' => $price, 'display_order' => 1]);
-}
-
-/** 大人券種（ペア割の対象、6.5.2）。 */
-function adultTicket(int $price = 2000): TicketType
-{
-    return makeTicketType(TicketType::ADULT_NAME, $price);
-}
-
-/** 大人以外の券種（ペア割の対象外）。 */
-function studentTicket(int $price = 1500): TicketType
-{
-    return makeTicketType('学生', $price);
 }
 
 function pricing(): PricingService

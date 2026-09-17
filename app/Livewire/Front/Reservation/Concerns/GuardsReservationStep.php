@@ -5,7 +5,7 @@ namespace App\Livewire\Front\Reservation\Concerns;
 use App\Services\SeatLockService;
 
 /**
- * 同意後の予約フロー（P-33・P-34）が共通して持つ、先へ進める前提の判定（4.3.12）。
+ * 同意後の予約フロー（P-33・P-34・P-35）が共通して持つ、先へ進める前提の判定（4.3.12 / 4.3.13）。
  *
  * 前提は3つあり、いずれも**利用者の直前の操作ではなく描画時点の状態**で決まる。
  *

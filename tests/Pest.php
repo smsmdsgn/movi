@@ -382,15 +382,34 @@ function createFreeTicket(): FreeTicket
 }
 
 /**
- * 券種を1件作成する。
+ * 券種を1件作成する（大人・2,000円）。価格を変えたい場合は `adultTicket()` を使う。
  */
 function createTicketType(): TicketType
 {
-    // 同一テスト内で複数回呼べるよう冪等にする（`m_ticket_types.name` は一意）。
-    return TicketType::firstOrCreate(
-        ['name' => TicketType::ADULT_NAME],
-        ['price' => 2000, 'display_order' => 1],
-    );
+    return adultTicket();
+}
+
+/**
+ * 名称と価格を指定して券種を作る（`m_ticket_types.name` は一意）。
+ *
+ * `firstOrCreate` にすると、既に同名の券種がある場合に `$price` が黙って無視され、
+ * 金額の期待値の根拠が崩れる（「通るが検証していない」テストになる）。
+ */
+function makeTicketType(string $name, int $price, int $displayOrder = 1): TicketType
+{
+    return TicketType::updateOrCreate(['name' => $name], ['price' => $price, 'display_order' => $displayOrder]);
+}
+
+/** 大人券種（ペア割の対象、6.5.2）。 */
+function adultTicket(int $price = 2000): TicketType
+{
+    return makeTicketType(TicketType::ADULT_NAME, $price);
+}
+
+/** 大人以外の券種（ペア割の対象外）。並び順はシーダー（6.5.1）に合わせて2とする。 */
+function studentTicket(int $price = 1500): TicketType
+{
+    return makeTicketType('学生', $price, displayOrder: 2);
 }
 
 /**
