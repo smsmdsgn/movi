@@ -10,6 +10,7 @@ use App\Http\Controllers\Front\MovieController;
 use App\Http\Controllers\Front\PagePlaceholderController;
 use App\Http\Controllers\Front\PaymentController;
 use App\Http\Controllers\Front\PlaceholderController;
+use App\Http\Controllers\Front\ReservationCompleteController;
 use App\Http\Controllers\Front\ScheduleController;
 use App\Http\Controllers\Front\SeatSelectionController;
 use App\Http\Controllers\Front\TicketSelectionController;
@@ -53,8 +54,10 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
     | 予約フロー（P-31〜P-38）のうち、P-31（座席選択）は工程5-bで、P-32（同意画面）は
     | 工程5-cで、P-33（会員／非会員の選択）は工程5-dで、P-34（お客様情報の入力）は
     | 工程5-eで、P-35（券種選択）は工程5-iで、P-36（決済）は工程5-kで、P-37（予約確認）は
-    | 工程5-lで実装済み。P-38（予約完了）は P-37 の遷移先として必要なため、ルート骨格のみを
-    | 先行して置く（実装時に差し替える）。
+    | 工程5-lで、P-38（予約完了）は工程5-mで実装済み。
+    |
+    | P-38 のURLは上映回IDではなく予約番号を持ち、所有者の判定を要する（17.2.1-1）ため
+    | ReservationStepController の派生ではなく専用のコントローラとする（4.3.16）。
     |
     */
     Route::get('/', ChainTopController::class)->name('front.home');
@@ -85,7 +88,7 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
         Route::get('screenings/{id}/tickets', TicketSelectionController::class)->name('reservation.tickets')->whereNumber('id');
         Route::get('screenings/{id}/payment', PaymentController::class)->name('reservation.payment')->whereNumber('id');
         Route::get('screenings/{id}/confirm', ConfirmController::class)->name('reservation.confirm')->whereNumber('id');
-        Route::get('reservations/{no}/complete', PagePlaceholderController::class)->defaults('screenId', 'P-38')->name('reservation.complete')->where('no', '[0-9]{8}');
+        Route::get('reservations/{no}/complete', ReservationCompleteController::class)->name('reservation.complete')->where('no', '[0-9]{8}');
     });
 
     /*

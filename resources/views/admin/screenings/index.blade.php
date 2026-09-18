@@ -51,9 +51,11 @@
         <flux:table.rows>
             @forelse ($screenings as $screening)
                 @php
-                    $canUpdate = $screening->reservations_count === 0 && \Illuminate\Support\Facades\Gate::forUser($currentAdmin)->allows('update', $screening);
+                    // 編集は有効な予約（`pending` / `paid`）が無ければ許す（6.2 制約1、12章 旧残課題33）。
+                    $canUpdate = $screening->active_reservations_count === 0 && \Illuminate\Support\Facades\Gate::forUser($currentAdmin)->allows('update', $screening);
                     // 削除は開始前の回に限る（6.2「上映回は上映期間終了後も保持」、4.8.6追記表）。
-                    $canDelete =$screening->reservations_count === 0 && $screening->starts_at->isFuture() && \Illuminate\Support\Facades\Gate::forUser($currentAdmin)->allows('delete', $screening);
+                    // **状態を問わず予約行が1件でもあれば削除できない**（`restrictOnDelete`）。
+                    $canDelete = $screening->reservations_count === 0 && $screening->starts_at->isFuture() && \Illuminate\Support\Facades\Gate::forUser($currentAdmin)->allows('delete', $screening);
                 @endphp
                 <flux:table.row :key="$screening->id">
                     @if ($canSelectCinema)
@@ -64,7 +66,8 @@
                     <flux:table.cell>{{ $screening->ends_at->format('H:i') }}</flux:table.cell>
                     <flux:table.cell>{{ $screening->booking->movie->title }}</flux:table.cell>
                     <flux:table.cell>{{ $screening->booking->format->name }}</flux:table.cell>
-                    <flux:table.cell>{{ $screening->reservations_count }}</flux:table.cell>
+                    {{-- 件数は有効な予約のみを数える（期限切れ・キャンセル済みは席を押さえない）。 --}}
+                    <flux:table.cell>{{ $screening->active_reservations_count }}</flux:table.cell>
                     <flux:table.cell>
                         @if ($canUpdate || $canDelete)
                             <div class="flex gap-2">
@@ -75,6 +78,11 @@
                                     <flux:button size="sm" variant="danger" wire:click="deleteScreening({{ $screening->id }})" wire:confirm="{{ __('admin.screening.actions.delete_confirm') }}">{{ __('admin.screening.actions.delete') }}</flux:button>
                                 @endif
                             </div>
+                            {{-- 編集はできるが削除はできない場合（終端の予約が残っている）。
+                                 件数が0と表示されるため、理由を添える。 --}}
+                            @if ($canUpdate && ! $canDelete && $screening->reservations_count > 0 && $screening->starts_at->isFuture())
+                                <flux:text size="sm" variant="subtle">{{ __('admin.screening.notices.has_closed_reservations') }}</flux:text>
+                            @endif
                         @elseif ($screening->reservations_count > 0)
                             <flux:text size="sm" variant="subtle">{{ __('admin.screening.notices.has_reservations') }}</flux:text>
                         @endif

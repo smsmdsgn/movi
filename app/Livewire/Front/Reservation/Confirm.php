@@ -12,6 +12,7 @@ use App\Models\Screening;
 use App\Models\Seat;
 use App\Models\TicketType;
 use App\Models\User;
+use App\Services\CompletedReservations;
 use App\Services\PaymentAttempt;
 use App\Services\PriceBreakdown;
 use App\Services\PricingService;
@@ -241,9 +242,10 @@ class Confirm extends Component
 
     private function forwardToComplete(PaymentAttempt $attempt): void
     {
-        $reservationNo = $attempt->reservation?->reservation_no;
+        $reservation = $attempt->reservation;
+        $reservationNo = $reservation?->reservation_no;
 
-        if ($reservationNo === null) {
+        if ($reservation === null || $reservationNo === null) {
             // 確定できていれば必ず予約番号がある。取り違えたURL（`/reservations//complete`）を
             // 静かに作らないよう、ここで決済失敗として扱う。
             $this->failWith('front.reservation.errors.payment_failed', seatsLost: false);
@@ -254,6 +256,10 @@ class Confirm extends Component
         // 確定した時点で持ち越す内容は無い。残すと完了画面から戻った利用者が
         // 同じ内容で確定をもう一度試みる経路になる。
         $this->draft()->clear();
+
+        // 完了画面（P-38）への到達を認める材料を残す。非会員はこれが唯一の手掛かりで
+        // あり、下書きの破棄とは別のキーに置く（17.2.1 / 12章 旧残課題34）。
+        app(CompletedReservations::class)->remember($reservation);
 
         $this->redirect(route('front.reservation.complete', ['no' => $reservationNo]), navigate: false);
     }

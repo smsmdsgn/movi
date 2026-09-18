@@ -75,6 +75,14 @@ function screeningInput(string $modifier): string
 /** 決済済みの予約を1件作る（6.2 制約1 の検証用。座席は伴わない）。 */
 function makePaidReservation(Screening $screening): Reservation
 {
+    return makeReservationFor($screening, ReservationStatus::Paid);
+}
+
+/**
+ * 状態を指定して予約を1件作る（6.2 制約1 / 12章 旧残課題33 の検証用。座席は伴わない）。
+ */
+function makeReservationFor(Screening $screening, ReservationStatus $status): Reservation
+{
     return Reservation::create([
         'reservation_no' => nextTestReservationNo(),
         'guest_name' => 'テスト太郎',
@@ -82,7 +90,7 @@ function makePaidReservation(Screening $screening): Reservation
         'contact_type' => ContactType::Guest,
         'guest_email' => 'guest@example.com',
         'screening_id' => $screening->id,
-        'status' => ReservationStatus::Paid,
+        'status' => $status,
         'total_amount' => 2000,
     ]);
 }
@@ -101,6 +109,48 @@ it('super-admin は一覧を閲覧でき、新規登録ボタンが表示され�
         ->assertOk()
         ->assertSee($fixture['movie']->title)
         ->assertSee(__('admin.screening.actions.create'));
+});
+
+it('一覧は有効な予約のみを件数に数え、終端の予約だけの回には編集ボタンと削除できない理由を出す（4.3.16）', function () {
+    // 削除の可否は開始前の回に限られる（6.2）。一覧は本日で絞るため、本日の朝に固定して
+    // 10:00 の回を「開始前」にする。
+    $this->travelTo(now()->startOfDay()->addHours(8));
+
+    $fixture = makeScreeningFixture();
+    $screening = Screening::create([
+        'booking_id' => $fixture['booking']->id,
+        'theater_id' => $fixture['theater']->id,
+        'starts_at' => now()->startOfDay()->addHours(10),
+        'ends_at' => now()->startOfDay()->addHours(12),
+    ]);
+    makeReservationFor($screening, ReservationStatus::Expired);
+
+    // 件数は0（座席を押さえていない）。編集は可、削除は不可でその理由を添える。
+    // 「編集」「削除」の文字は画面の他の箇所にも現れるため、ボタンの `wire:click` で見る。
+    $this->actingAs(createAdmin(), 'admin')
+        ->get(route('admin.screening.index'))
+        ->assertOk()
+        ->assertSee("editScreening({$screening->id})", escape: false)
+        ->assertDontSee("deleteScreening({$screening->id})", escape: false)
+        ->assertSee(__('admin.screening.notices.has_closed_reservations'));
+});
+
+it('一覧は有効な予約がある回の編集・削除ボタンを出さない（4.8.6追記表）', function () {
+    $fixture = makeScreeningFixture();
+    $screening = Screening::create([
+        'booking_id' => $fixture['booking']->id,
+        'theater_id' => $fixture['theater']->id,
+        'starts_at' => now()->startOfDay()->addHours(10),
+        'ends_at' => now()->startOfDay()->addHours(12),
+    ]);
+    makePaidReservation($screening);
+
+    $this->actingAs(createAdmin(), 'admin')
+        ->get(route('admin.screening.index'))
+        ->assertOk()
+        ->assertDontSee("editScreening({$screening->id})", escape: false)
+        ->assertDontSee("deleteScreening({$screening->id})", escape: false)
+        ->assertSee(__('admin.screening.notices.has_reservations'));
 });
 
 it('cinema-admin は自館の上映回の一覧へ到達できる（4.8.2 / 4.8.5）', function () {
@@ -455,6 +505,49 @@ it('予約が存在する上映回は編集できない（4.8.6追記表）', fu
         ->assertSet('showForm', false);
 });
 
+it('決済中（pending）の予約が存在する上映回は編集できない（4.3.15 / 6.2 制約1）', function () {
+    $fixture = makeScreeningFixture();
+
+    $screening = Screening::create([
+        'booking_id' => $fixture['booking']->id,
+        'theater_id' => $fixture['theater']->id,
+        'starts_at' => now()->startOfDay()->addHours(10),
+        'ends_at' => now()->startOfDay()->addHours(12),
+    ]);
+    makeReservationFor($screening, ReservationStatus::Pending);
+
+    Livewire::actingAs(createAdmin(), 'admin')
+        ->test(Index::class)
+        ->call('editScreening', $screening->id)
+        ->assertSet('showForm', false);
+});
+
+it('期限切れ・キャンセル済みの予約だけが残る上映回は編集できる（12章 旧残課題33）', function (ReservationStatus $status) {
+    $fixture = makeScreeningFixture();
+
+    $screening = Screening::create([
+        'booking_id' => $fixture['booking']->id,
+        'theater_id' => $fixture['theater']->id,
+        'starts_at' => now()->addDay()->setTime(10, 0),
+        'ends_at' => now()->addDay()->setTime(12, 0),
+    ]);
+    makeReservationFor($screening, $status);
+
+    Livewire::actingAs(createAdmin(), 'admin')
+        ->test(Index::class)
+        ->call('editScreening', $screening->id)
+        ->assertSet('showForm', true)
+        ->set('starts_at', now()->addDay()->setTime(18, 0)->format('Y-m-d\TH:i'))
+        ->set('ends_at', now()->addDay()->setTime(20, 0)->format('Y-m-d\TH:i'))
+        ->call('save')
+        ->assertHasNoErrors();
+
+    expect($screening->fresh()->starts_at->format('H:i'))->toBe('18:00');
+})->with([
+    'expired（期限切れ）' => ReservationStatus::Expired,
+    'cancelled（キャンセル済み）' => ReservationStatus::Cancelled,
+]);
+
 it('予約が存在する上映回は削除できない（6.2 制約1）', function () {
     $fixture = makeScreeningFixture();
 
@@ -472,6 +565,29 @@ it('予約が存在する上映回は削除できない（6.2 制約1）', funct
 
     expect(Screening::whereKey($screening->id)->exists())->toBeTrue();
 });
+
+it('期限切れ・キャンセル済みの予約が残る上映回も削除できない（restrictOnDelete。12章 旧残課題33）', function (ReservationStatus $status) {
+    $fixture = makeScreeningFixture();
+
+    $screening = Screening::create([
+        'booking_id' => $fixture['booking']->id,
+        'theater_id' => $fixture['theater']->id,
+        'starts_at' => now()->addDay(),
+        'ends_at' => now()->addDay()->addHours(2),
+    ]);
+    makeReservationFor($screening, $status);
+
+    // 編集は許すが、削除は `t_reservations.screening_id` の `restrictOnDelete` により
+    // DB側が拒むため、画面でも止める（500を返さない）。
+    Livewire::actingAs(createAdmin(), 'admin')
+        ->test(Index::class)
+        ->call('deleteScreening', $screening->id);
+
+    expect(Screening::whereKey($screening->id)->exists())->toBeTrue();
+})->with([
+    'expired（期限切れ）' => ReservationStatus::Expired,
+    'cancelled（キャンセル済み）' => ReservationStatus::Cancelled,
+]);
 
 it('期限切れの座席ロックだけの上映回は削除できる（SeatLock::active() の境界）', function () {
     $fixture = makeScreeningFixture();

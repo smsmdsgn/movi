@@ -91,10 +91,11 @@ class Index extends Component
 
         Gate::forUser($admin)->authorize('update', $screening);
 
-        if ($screening->reservations()->exists()) {
-            // 予約が存在する上映回は編集できない（4.8.6追記表）。一覧のボタンも
-            // 出さないが、`/livewire/update` への直接呼び出しに備えてここでも拒む。
-            Flux::toast(text: __('admin.screening.errors.locked_by_reservations'), variant: 'danger');
+        if ($screening->reservations()->active()->exists()) {
+            // 有効な予約（`pending` / `paid`）が存在する上映回は編集できない
+            // （4.8.6追記表 / 6.2 制約1）。一覧のボタンも出さないが、
+            // `/livewire/update` への直接呼び出しに備えてここでも拒む。
+            Flux::toast(text: __('admin.screening.errors.locked_by_active_reservations'), variant: 'danger');
 
             return;
         }
@@ -180,8 +181,11 @@ class Index extends Component
                 return ['starts_at', 'admin.screening.errors.not_found'];
             }
 
-            if ($screening !== null && $screening->reservations()->exists()) {
-                return ['starts_at', 'admin.screening.errors.locked_by_reservations'];
+            // **`expired` / `cancelled` は妨げとしない**（6.2 制約1 / 12章 旧残課題33）。
+            // 決済を中断した利用者が1人でもいれば、その回を以後ずっと編集できなくなる。
+            // 座席を占有しない予約は、開始時刻やシアターを変えても矛盾を生まない。
+            if ($screening !== null && $screening->reservations()->active()->exists()) {
+                return ['starts_at', 'admin.screening.errors.locked_by_active_reservations'];
             }
 
             if ($screening !== null && SeatLock::where('screening_id', $screening->id)->active()->exists()) {
@@ -500,7 +504,14 @@ class Index extends Component
                 fn ($booking) => $booking->where('cinema_id', $cinemaId)
             ))
             ->with(['booking.cinema', 'booking.movie', 'booking.format', 'theater'])
-            ->withCount('reservations')
+            // 件数と操作可否で数える対象が異なる（6.2 制約1 / 12章 旧残課題33）。
+            // 編集の可否と一覧の件数は有効な予約（`pending` / `paid`）、削除の可否は
+            // 状態を問わない全件（`t_reservations.screening_id` が `restrictOnDelete`
+            // であり、終端の予約が残る限りDBが削除を拒む）。
+            ->withCount([
+                'reservations',
+                'reservations as active_reservations_count' => fn ($query) => $query->active(),
+            ])
             ->whereDate('starts_at', $this->selectedDate()->toDateString())
             ->when($this->filterTheaterId !== null, fn ($query) => $query->where('theater_id', $this->filterTheaterId))
             ->orderBy('starts_at')

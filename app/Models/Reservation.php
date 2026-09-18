@@ -7,6 +7,8 @@ use App\Enums\ReservationStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -57,6 +59,28 @@ class Reservation extends Model
             'cancelled_at' => 'datetime',
             'active_free_ticket_id' => 'integer',
         ];
+    }
+
+    /**
+     * 上映回の座席を押さえている予約（`pending` / `paid`、4.3.3）。
+     *
+     * `expired` / `cancelled` は終端であり、行は残るが座席を占有しない
+     * （`t_reservation_seats.released_at` が入る。6.4.2）。**「予約が存在するか」を
+     * 状態を問わずに判定すると、決済を中断した利用者が1人でもいた上映回を
+     * A-09 が恒久的に編集できなくなる**（6.2 制約1 / 12章 旧残課題33。4.3.16）。
+     *
+     * **`expires_at` は見ない。** 期限を過ぎた `pending` も、B-02（10章）が `expired`
+     * へ移すまでは含まれる（座席ロックは切れていても行の状態は `pending` のままである）。
+     * 12章 残課題35 の経路では恒久的に残りうる。B-02 の実装時に、本スコープを
+     * 「`pending` は期限内のものに限る」へ狭めるかを判断すること。
+     *
+     * @param  Builder<Reservation>  $query
+     * @return Builder<Reservation>
+     */
+    #[Scope]
+    protected function active(Builder $query): Builder
+    {
+        return $query->whereIn('status', [ReservationStatus::Pending, ReservationStatus::Paid]);
     }
 
     /**

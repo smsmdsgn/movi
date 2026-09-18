@@ -10,6 +10,7 @@ use App\Models\SeatLock;
 use App\Models\Theater;
 use App\Models\User;
 use App\Services\CardCharge;
+use App\Services\CompletedReservations;
 use App\Services\PaymentAttempt;
 use App\Services\PriceBreakdown;
 use App\Services\Purchaser;
@@ -102,7 +103,9 @@ it('確定すると予約完了（P-38）へ進み、下書きを破棄する（
         ->and($stripe->charges[0]['paymentMethodId'])->toBe('pm_card_visa')
         // 確定後に同じ内容でもう一度確定できないよう、持ち越しを捨てる。
         ->and(app(ReservationDraft::class)->tickets($screening->id))->toBe([])
-        ->and(app(ReservationDraft::class)->paymentMethodId($screening->id))->toBeNull();
+        ->and(app(ReservationDraft::class)->paymentMethodId($screening->id))->toBeNull()
+        // 下書きとは別に、完了画面（P-38）への到達を認める材料を残す（12章 旧残課題34）。
+        ->and(app(CompletedReservations::class)->includes($reservation))->toBeTrue();
 });
 
 it('支払方法が用意されていない場合は決済画面へ戻す（4.3.15）', function () {

@@ -19,6 +19,7 @@ use App\Models\Theater;
 use App\Models\TicketType;
 use App\Models\User;
 use App\Services\CardCharge;
+use App\Services\CompletedReservations;
 use App\Services\ReservationDraft;
 use App\Services\SeatLockService;
 use App\Services\StripeException;
@@ -568,6 +569,21 @@ function agreedDraftSession(Screening $screening): array
     agreeToTerms($screening);
 
     return ['reservation' => session('reservation')];
+}
+
+/*
+ * HTTP テスト用。予約完了（P-38）へ到達できる状態、すなわち「その予約を確定させた
+ * ブラウザ」のセッションを組み立てる（17.2.1 / `CompletedReservations`）。
+ *
+ * `agreedDraftSession()` と同じく、セッションの構造を直接書かずサービスに作らせる。
+ *
+ * @return array<string, mixed>
+ */
+function completedReservationSession(Reservation $reservation): array
+{
+    app(CompletedReservations::class)->remember($reservation);
+
+    return ['completed_reservations' => session('completed_reservations')];
 }
 
 /**
