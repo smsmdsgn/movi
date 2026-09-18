@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Auth;
  * | 利用規約に同意している | 同意画面（P-32） |
  * | 非会員はお客様情報を入力している | お客様情報の入力（P-34） |
  * | 保持中の全席に実在する券種を割り当てている | 券種選択（P-35） |
+ * | 支払方法を用意している（支払金額が0円の場合を除く） | 決済（P-36） |
  *
  * **復帰先を段階の1つ前に固定しない。** 未同意の利用者を P-31 へ戻すと保持中の座席を
  * 選び直させることになり、期限切れの利用者を P-32 へ送っても同意だけでは先へ進めない。
@@ -97,6 +98,16 @@ trait GuardsReservationStep
             );
         }
 
+        // 支払方法（P-36）が用意されていない。支払金額が0円の予約は決済を通さないため
+        // （4.5.2）、前提とするかどうかは画面が金額から決める。
+        if ($this->requiresPaymentMethod() && $this->draft()->paymentMethodId($this->screeningId) === null) {
+            return $this->status(
+                'front.reservation.errors.payment_method_required',
+                route('front.reservation.payment', ['id' => $this->screeningId]),
+                'front.reservation.back_to_payment',
+            );
+        }
+
         return $this->status(null, null, null);
     }
 
@@ -141,6 +152,17 @@ trait GuardsReservationStep
      * あり、これを前提とする画面は P-36 以降に限られる。
      */
     protected function requiresTicketSelection(): bool
+    {
+        return false;
+    }
+
+    /**
+     * 支払方法（P-36、7.11）を前提とするか。
+     *
+     * **既定は偽。** 支払金額が0円の予約は決済画面を通らない（4.5.2）ため、前提とするか
+     * どうかは金額を知る画面（P-37 以降）が決める。
+     */
+    protected function requiresPaymentMethod(): bool
     {
         return false;
     }

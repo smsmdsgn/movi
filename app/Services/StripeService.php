@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use Stripe\Exception\ApiErrorException;
+use Stripe\Exception\CardException;
 use Stripe\Exception\InvalidRequestException;
+use Stripe\PaymentIntent;
 use Stripe\StripeClient;
 
 /**
@@ -34,6 +36,17 @@ class StripeService
      * 英数字に加えてアンダースコアを許す（Stripe のテスト用ID `pm_card_visa` 等がこの形式）。
      */
     public const string PAYMENT_METHOD_ID_REGEX = '#\Apm_[A-Za-z0-9_]{1,250}\z#';
+
+    /**
+     * PaymentIntent のIDとして受け付ける形式。`retrievePayment()` が用いる。
+     *
+     * 保存元は `t_reservations.stripe_payment_intent_id` だが、URLのパスへ連結する点は
+     * PaymentMethod と変わらないため、同じ確認を行う。
+     */
+    public const string PAYMENT_INTENT_ID_REGEX = '#\Api_[A-Za-z0-9_]{1,250}\z#';
+
+    /** 決済通貨（8.2。テストモードのみ）。JPY はゼロ小数通貨のため金額を100倍しない。 */
+    public const string CURRENCY = 'jpy';
 
     private ?StripeClient $client = null;
 
@@ -85,6 +98,121 @@ class StripeService
         }
 
         return $paymentMethod->type === 'card';
+    }
+
+    /**
+     * カードに課金する（8.2 / 17.3）。作成と確認（confirm）を1回の呼び出しで行う。
+     *
+     * **金額はサーバーが算出した値のみを受け取る**（17.3-2）。`$idempotencyKey` は通信の
+     * 再送による二重課金を防ぐ（17.3-4）。**同じキーで再送すると Stripe は最初の応答を
+     * 返す**ため、カードを入れ直した再試行には別のキーを与えること。
+     *
+     * `use_stripe_sdk` を立てるのは、追加認証（3Dセキュア）をブラウザの
+     * `handleNextAction()` で処理するため。`payment_method_types` をカードに限ることで、
+     * 外部サイトへのリダイレクトを伴う支払方法が選ばれる経路を作らない（8.2 の【根拠】）。
+     *
+     * @param  array<string, string>  $metadata  Stripe 側の照合用。個人情報を含めない（17.4.3）
+     *
+     * @throws StripeException 通信に失敗した場合
+     */
+    public function chargeCard(int $amount, string $paymentMethodId, string $idempotencyKey, array $metadata = []): CardCharge
+    {
+        try {
+            $intent = $this->client()->paymentIntents->create([
+                'amount' => $amount,
+                // JPY は最小単位が円であり、100倍しない（ゼロ小数通貨）。
+                'currency' => self::CURRENCY,
+                'payment_method' => $paymentMethodId,
+                'payment_method_types' => ['card'],
+                'confirm' => true,
+                'use_stripe_sdk' => true,
+                'metadata' => $metadata,
+            ], ['idempotency_key' => $idempotencyKey]);
+        } catch (CardException $exception) {
+            // カードの拒否。利用者の操作（別のカードの入力）で解消しうるため、
+            // 通信の失敗とは区別する。
+            return CardCharge::declined($exception->getError()?->payment_intent?->id);
+        } catch (InvalidRequestException) {
+            // 使用済み・存在しない PaymentMethod 等。同じく入力のやり直しへ倒す。
+            return CardCharge::declined(null);
+        } catch (ApiErrorException) {
+            throw StripeException::requestFailed();
+        }
+
+        return $this->toCharge($intent);
+    }
+
+    /**
+     * PaymentIntent を再取得する（8.2「決済結果の検証」/ 17.3-3）。
+     *
+     * **クライアントから通知された決済成功をそのまま信用しない。** 追加認証を終えた
+     * 旨の通知を受けた後、本メソッドで取り直した `status` と金額で確定を判断する。
+     *
+     * @throws StripeException 通信に失敗した場合、およびIDの形式が不正な場合
+     */
+    public function retrievePayment(string $paymentIntentId): CardCharge
+    {
+        if (preg_match(self::PAYMENT_INTENT_ID_REGEX, $paymentIntentId) !== 1) {
+            throw StripeException::requestFailed();
+        }
+
+        try {
+            $intent = $this->client()->paymentIntents->retrieve($paymentIntentId);
+        } catch (ApiErrorException) {
+            throw StripeException::requestFailed();
+        }
+
+        return $this->toCharge($intent);
+    }
+
+    /**
+     * 返金する（4.4-4 / 17.3-5）。
+     *
+     * 呼び出し側は予約1件につき1回のみ実行すること（`t_reservations.refunded_at`）。
+     * 本メソッドにも `$idempotencyKey` を与え、通信の再送で二重に返金しない。
+     *
+     * @throws StripeException 返金できなかった場合（運用で追う必要があるため握り潰さない）
+     */
+    public function refund(string $paymentIntentId, string $idempotencyKey): void
+    {
+        try {
+            $this->client()->refunds->create(
+                ['payment_intent' => $paymentIntentId],
+                ['idempotency_key' => $idempotencyKey],
+            );
+        } catch (ApiErrorException) {
+            throw StripeException::refundFailed();
+        }
+    }
+
+    /**
+     * 追加認証（3Dセキュア）の途中で確定できなくなった PaymentIntent を取り消す。
+     *
+     * 課金は成立していないため返金ではなく取り消しとする。失敗しても利用者の操作には
+     * 影響しないため、例外にせず黙って戻る（Stripe 側は未確定のまま自動で失効する）。
+     */
+    public function cancelPayment(string $paymentIntentId): bool
+    {
+        try {
+            $this->client()->paymentIntents->cancel($paymentIntentId);
+        } catch (ApiErrorException) {
+            // 取り消せなくても、確定していない PaymentIntent は課金にならない。
+            // **成否は返す。** 呼び出し側は「取り消せた」場合にのみ、予約から
+            // PaymentIntent のIDを外す（10章 B-02 の除外条件）。
+            return false;
+        }
+
+        return true;
+    }
+
+    private function toCharge(PaymentIntent $intent): CardCharge
+    {
+        return CardCharge::fromIntent(
+            $intent->id,
+            (string) $intent->status,
+            (int) $intent->amount,
+            is_string($intent->client_secret) ? $intent->client_secret : null,
+        );
     }
 
     /**

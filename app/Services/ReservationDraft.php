@@ -9,8 +9,8 @@ use Illuminate\Support\Facades\Session;
 /**
  * 予約フローが画面をまたいで持ち越す入力（13.4.7）。
  *
- * `t_reservations` は決済完了時にしか作られず（6.4.2）、Livewire のコンポーネント状態は
- * 画面をまたげない。常駐プロセスを持てない制約（環境）もあるため、**セッションに単一の
+ * `t_reservation_seats` は決済完了時にしか作られず（6.4.2）、Livewire のコンポーネント状態は
+ * 画面をまたげない（`t_reservations` の `pending` 行は課金の直前に作られる。4.3.15）。常駐プロセスを持てない制約（環境）もあるため、**セッションに単一の
  * キーで置く**。`SESSION_DRIVER=database` のため実体はデータベースにある。
  *
  * ```
@@ -155,6 +155,18 @@ class ReservationDraft
         return $draft !== null && $draft['screening_id'] === $screeningId
             ? $draft['payment_method_id']
             : null;
+    }
+
+    /**
+     * 記録を破棄する（予約の確定後、P-37）。
+     *
+     * **確定した時点で持ち越す意味が無くなる。** 残したままにすると、完了画面から戻った
+     * 利用者が同じ座席・券種・カードで確定をもう一度試みる経路が残る（座席ロックは
+     * 削除済みのため失敗するが、課金は成立しうる）。
+     */
+    public function clear(): void
+    {
+        Session::forget(self::SESSION_KEY);
     }
 
     /**

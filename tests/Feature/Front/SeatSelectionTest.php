@@ -1,9 +1,13 @@
 <?php
 
+use App\Enums\PaymentOutcome;
 use App\Enums\SeatSelectionState;
 use App\Livewire\Front\Reservation\SeatSelection;
 use App\Models\SeatLock;
 use App\Models\User;
+use App\Services\PricingService;
+use App\Services\Purchaser;
+use App\Services\ReservationService;
 use App\Services\SeatLockService;
 use Carbon\CarbonImmutable;
 use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
@@ -340,4 +344,38 @@ it('座席を選択して次へ進むと同意画面（P-32）へ遷移する（
         ->call('toggle', $seats[0]->id)
         ->call('proceed')
         ->assertRedirect(route('front.reservation.agreement', ['id' => $screening->id]));
+});
+
+it('確定した予約の座席は、他の利用者から予約済みに見える（6.4.2 / 7.6.2）', function () {
+    // 予約確定（工程5-l）で `t_reservation_seats` に本番の書き込みが入るようになったため、
+    // 座席表の状態と残席の集計に反映されることを機能をまたいで固定する。
+    ['screening' => $screening, 'seats' => $seats] = makeReservationFixture();
+    $holderKey = 'session:buyer';
+    holdSeatsForScreening($screening, $holderKey, $seats[0]);
+
+    $ticketType = adultTicket(2000);
+    $breakdown = app(PricingService::class)->calculate($screening, [$seats[0]->id => $ticketType->id]);
+    fakeStripeService(settledCharge($breakdown->total()));
+
+    $attempt = app(ReservationService::class)->payAndConfirm(
+        $screening,
+        $breakdown,
+        Purchaser::guest([
+            'name' => '祇園　太郎',
+            'name_kana' => 'ギオン　タロウ',
+            'phone' => '0751234567',
+            'email' => 'guest@example.test',
+        ]),
+        $holderKey,
+        'pm_card_visa',
+    );
+
+    expect($attempt->outcome)->toBe(PaymentOutcome::Confirmed);
+
+    // 別の利用者から見た座席表。ロックは削除済みで、予約座席として占有されている。
+    $html = Livewire::test(SeatSelection::class, ['screening' => $screening])->html();
+
+    expect(seatStateOf($html, $seats[0]->id))->toBe(SeatSelectionState::Occupied->value)
+        ->and(seatStateOf($html, $seats[1]->id))->toBe(SeatSelectionState::Selectable->value)
+        ->and(SeatLock::where('screening_id', $screening->id)->count())->toBe(0);
 });

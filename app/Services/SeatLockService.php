@@ -161,6 +161,45 @@ class SeatLockService
     }
 
     /**
+     * 保持中のロックのうち最も早い期限（7.12-5 / 8.2）。1件も無ければ null を返す。
+     *
+     * 「あと何分で座席を失うか」は、画面の表示（P-37）と課金の可否（`ReservationService`）
+     * の双方が使う。**別々に問い合わせると片方だけが改定されうる**ため、条件をここに置く
+     *（4.3.8「条件の集約」と同じ趣旨。読み取りは `SeatLock::active()` スコープ経由）。
+     */
+    public function holdExpiresAt(Screening $screening, string $holderKey): ?CarbonImmutable
+    {
+        $expiresAt = SeatLock::where('screening_id', $screening->id)
+            ->where('holder_key', $holderKey)
+            ->active()
+            ->min('expires_at');
+
+        return is_string($expiresAt) ? CarbonImmutable::parse($expiresAt) : null;
+    }
+
+    /**
+     * 指定した座席のロックをまとめて解放する（予約確定の手順4、8.2 / 13.4.7）。
+     *
+     * **呼び出し側のトランザクションに乗る。** `ReservationService::finalize()` が
+     * 予約座席の作成と同一トランザクションで呼び、確定と解放を不可分にする。
+     * ロックへの書き込みを各所に書かないための追加であり（13.4.6）、条件は
+     * `release()` と同じく保持者キーで絞る。
+     *
+     * @param  array<int, int>  $seatIds
+     */
+    public function releaseHeld(Screening $screening, array $seatIds, string $holderKey): void
+    {
+        if ($seatIds === []) {
+            return;
+        }
+
+        SeatLock::where('screening_id', $screening->id)
+            ->whereIn('seat_id', $seatIds)
+            ->where('holder_key', $holderKey)
+            ->delete();
+    }
+
+    /**
      * 保持中のロックの有効期限を延長する（決済画面への遷移時に15分、6.4.1-4）。
      * 期限切れのロックは延長しない（B-01 による解放の対象として残す）。
      */

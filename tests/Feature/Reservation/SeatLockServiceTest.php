@@ -323,3 +323,59 @@ it('heldSeatIds は対象上映回で保持中の座席のみを返す', functio
 
     expect(lockService()->heldSeatIds($screening, 'session:alice'))->toBe([$seats[0]->id]);
 });
+
+it('holdExpiresAt は保持中のロックのうち最も早い期限を返す（7.12-5 / 8.2）', function () {
+    // この値は P-37 の残り時間表示と、`pending` 予約の `expires_at`（B-02 の基準）を
+    // 兼ねる。最も早い期限でなければ、ロックが切れた後も予約が生き残る。
+    ['screening' => $screening, 'seats' => $seats] = makeLockFixture();
+
+    lockService()->acquire($screening, $seats[0], 'session:alice');
+    lockService()->acquire($screening, $seats[1], 'session:alice');
+
+    SeatLock::where('seat_id', $seats[0]->id)->update(['expires_at' => CarbonImmutable::now()->addMinutes(3)]);
+    SeatLock::where('seat_id', $seats[1]->id)->update(['expires_at' => CarbonImmutable::now()->addMinutes(9)]);
+
+    expect(lockService()->holdExpiresAt($screening, 'session:alice')?->diffInMinutes(CarbonImmutable::now()))
+        ->toBeLessThan(4);
+});
+
+it('holdExpiresAt は期限切れのロックを数えない', function () {
+    ['screening' => $screening, 'seats' => $seats] = makeLockFixture();
+
+    lockService()->acquire($screening, $seats[0], 'session:alice');
+    SeatLock::where('seat_id', $seats[0]->id)->update(['expires_at' => CarbonImmutable::now()->subMinute()]);
+
+    expect(lockService()->holdExpiresAt($screening, 'session:alice'))->toBeNull()
+        // 他者のロックも数えない。
+        ->and(lockService()->holdExpiresAt($screening, 'session:bob'))->toBeNull();
+});
+
+it('releaseHeld は指定した座席と保持者のロックだけを解放する（8.2 手順4）', function () {
+    ['screening' => $screening, 'seats' => $seats, 'theater' => $theater] = makeLockFixture(4);
+    $other = makeOtherScreening($theater);
+
+    lockService()->acquire($screening, $seats[0], 'session:alice');
+    lockService()->acquire($screening, $seats[1], 'session:alice');
+    lockService()->acquire($screening, $seats[2], 'session:bob');
+
+    // 別の上映回のロックは直接作る（`acquire()` は条件6により同一利用者の複数上映回を
+    // 拒むため）。`releaseHeld()` が上映回で絞っていることを確かめるためだけに置く。
+    SeatLock::create([
+        'screening_id' => $other->id,
+        'seat_id' => $seats[3]->id,
+        'holder_key' => 'session:alice',
+        'expires_at' => CarbonImmutable::now()->addMinutes(10),
+    ]);
+
+    // 確定したのは1席目だけ。
+    lockService()->releaseHeld($screening, [$seats[0]->id], 'session:alice');
+
+    $remaining = SeatLock::pluck('seat_id')->all();
+
+    // 同じ保持者の他の座席・他者の座席・他の上映回のロックはいずれも残る。
+    expect($remaining)->toHaveCount(3)
+        ->and($remaining)->not->toContain($seats[0]->id)
+        ->and($remaining)->toContain($seats[1]->id)
+        ->and($remaining)->toContain($seats[2]->id)
+        ->and($remaining)->toContain($seats[3]->id);
+});

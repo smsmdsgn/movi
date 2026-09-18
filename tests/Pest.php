@@ -18,8 +18,11 @@ use App\Models\SeatType;
 use App\Models\Theater;
 use App\Models\TicketType;
 use App\Models\User;
+use App\Services\CardCharge;
 use App\Services\ReservationDraft;
 use App\Services\SeatLockService;
+use App\Services\StripeException;
+use App\Services\StripeService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -565,4 +568,107 @@ function agreedDraftSession(Screening $screening): array
     agreeToTerms($screening);
 
     return ['reservation' => session('reservation')];
+}
+
+/**
+ * 課金・返金の呼び出しを記録する差し替え用の `StripeService`（8.2）。
+ *
+ * テストでは Stripe と通信しない。`$charge` に `StripeException` を渡すと、
+ * `chargeCard()` がそれを送出する（通信失敗の再現）。`$retrieved` は追加認証
+ *（3Dセキュア）の完了後にサーバーが取り直す応答。
+ */
+function fakeStripeService(CardCharge|StripeException $charge, CardCharge|StripeException|null $retrieved = null): object
+{
+    $fake = new class extends StripeService
+    {
+        public CardCharge|StripeException|null $charge = null;
+
+        public CardCharge|StripeException|null $retrieved = null;
+
+        /** @var list<string> */
+        public array $retrievals = [];
+
+        /** 返金を失敗させる場合の例外（4.3.15「返金に失敗した場合」）。 */
+        public ?StripeException $refundError = null;
+
+        /** 取り消しが成功するか（失敗時は予約からIDを外さない。10章 B-02）。 */
+        public bool $cancelSucceeds = true;
+
+        /** 課金の最中に起きたこと（ロックの期限切れ等）を再現するための差し込み。 */
+        public ?Closure $onCharge = null;
+
+        /** @var list<array{amount: int, paymentMethodId: string, idempotencyKey: string}> */
+        public array $charges = [];
+
+        /** @var list<string> */
+        public array $refunds = [];
+
+        /** @var list<string> */
+        public array $cancellations = [];
+
+        public function chargeCard(int $amount, string $paymentMethodId, string $idempotencyKey, array $metadata = []): CardCharge
+        {
+            $this->charges[] = ['amount' => $amount, 'paymentMethodId' => $paymentMethodId, 'idempotencyKey' => $idempotencyKey];
+
+            if ($this->onCharge !== null) {
+                ($this->onCharge)();
+            }
+
+            if ($this->charge instanceof StripeException) {
+                throw $this->charge;
+            }
+
+            return $this->charge ?? CardCharge::declined(null);
+        }
+
+        public function retrievePayment(string $paymentIntentId): CardCharge
+        {
+            $this->retrievals[] = $paymentIntentId;
+
+            if ($this->retrieved instanceof StripeException) {
+                throw $this->retrieved;
+            }
+
+            return $this->retrieved ?? CardCharge::declined($paymentIntentId);
+        }
+
+        public function refund(string $paymentIntentId, string $idempotencyKey): void
+        {
+            $this->refunds[] = $paymentIntentId;
+
+            if ($this->refundError !== null) {
+                throw $this->refundError;
+            }
+        }
+
+        public function cancelPayment(string $paymentIntentId): bool
+        {
+            $this->cancellations[] = $paymentIntentId;
+
+            return $this->cancelSucceeds;
+        }
+
+        public function isConfigured(): bool
+        {
+            return true;
+        }
+
+        public function publishableKey(): string
+        {
+            return 'pk_test_dummy';
+        }
+    };
+
+    $fake->charge = $charge;
+    $fake->retrieved = $retrieved;
+
+    app()->instance(StripeService::class, $fake);
+
+    return $fake;
+}
+
+/** 課金が成立した応答（`PaymentIntent.status = succeeded`）。 */
+function settledCharge(int $amount, string $id = 'pi_test_settled'): CardCharge
+{
+    return CardCharge::fromIntent($id, CardCharge::STATUS_SUCCEEDED, $amount, null);
 }

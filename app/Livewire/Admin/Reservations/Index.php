@@ -169,8 +169,9 @@ class Index extends Component
                 'reservations as checked_in_count' => fn ($query) => $query
                     ->where('status', ReservationStatus::Paid)
                     ->whereNotNull('checked_in_at'),
-                'reservationSeats as booked_seats_count' => fn ($query) => $query
-                    ->whereNull('released_at'),
+                // 「占有中の予約座席」の条件は `ReservationSeat::occupying()` に集約する
+                // （6.4.2）。条件を直書きすると、解放の判定が改定された際に取り残される。
+                'reservationSeats as booked_seats_count' => fn ($query) => $query->occupying(),
             ])
             ->whereDate('starts_at', $this->selectedDate()->toDateString())
             ->when($this->filterTheaterId !== null, fn ($query) => $query->where('theater_id', $this->filterTheaterId))
