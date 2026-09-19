@@ -6,6 +6,7 @@ use App\Http\Controllers\Front\CinemaTopController;
 use App\Http\Controllers\Front\ConfirmController;
 use App\Http\Controllers\Front\CustomerInfoController;
 use App\Http\Controllers\Front\IdentifyController;
+use App\Http\Controllers\Front\LookupController;
 use App\Http\Controllers\Front\MovieController;
 use App\Http\Controllers\Front\PagePlaceholderController;
 use App\Http\Controllers\Front\PaymentController;
@@ -59,6 +60,10 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
     | P-38 のURLは上映回IDではなく予約番号を持ち、所有者の判定を要する（17.2.1-1）ため
     | ReservationStepController の派生ではなく専用のコントローラとする（4.3.16）。
     |
+    | P-07（予約照会）は工程5-nで実装済み（LookupController ＋ Livewire。4.3.17 / 7.19）。
+    | 館非依存ページだが、館の解決はヘッダーのビューコンポーネントに任せるため
+    | PagePlaceholderController と異なりコントローラでは解決しない。
+    |
     */
     Route::get('/', ChainTopController::class)->name('front.home');
 
@@ -67,7 +72,7 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
             Route::get('mypage', PagePlaceholderController::class)->defaults('screenId', 'P-05')->name('mypage.index');
             Route::get('mypage/reservations/{id}', PagePlaceholderController::class)->defaults('screenId', 'P-06')->name('mypage.reservation.show')->whereNumber('id');
         });
-        Route::get('lookup', PagePlaceholderController::class)->defaults('screenId', 'P-07')->name('lookup.index');
+        Route::get('lookup', LookupController::class)->name('lookup.index');
         Route::get('prices', PagePlaceholderController::class)->defaults('screenId', 'P-08')->name('prices.index');
         Route::get('food', PagePlaceholderController::class)->defaults('screenId', 'P-09')->name('food.index');
         Route::get('presale', PagePlaceholderController::class)->defaults('screenId', 'P-10')->name('presale.index');

@@ -2,14 +2,13 @@
 
 use App\Models\User;
 
-it('館非依存ページ（7.1.1 P-07〜P-20）のルートが画面IDを返す', function (string $routeName, string $screenId, array $parameters) {
+it('館非依存ページ（7.1.1 P-08〜P-20）のルートが画面IDを返す', function (string $routeName, string $screenId, array $parameters) {
     createCinema('gion', '祇園ムビ');
 
     $this->get(route($routeName, $parameters))
         ->assertOk()
         ->assertSee($screenId);
 })->with([
-    'P-07 予約照会' => ['front.lookup.index', 'P-07', []],
     'P-08 料金表・割引サービス' => ['front.prices.index', 'P-08', []],
     'P-09 フード・ドリンクメニュー' => ['front.food.index', 'P-09', []],
     'P-10 前売り券情報' => ['front.presale.index', 'P-10', []],
@@ -28,6 +27,9 @@ it('館非依存ページ（7.1.1 P-07〜P-20）のルートが画面IDを返す
 /*
  * P-38（予約完了）は工程5-mで実装したため、本ファイルの対象から外した。所有者の判定を
  * 含むため tests/Feature/Front/ReservationCompleteTest.php で検証する（4.3.16）。
+ *
+ * P-07（予約照会）は工程5-nで実装したため、同じく対象から外した。照合とレート制限を
+ * 含むため tests/Feature/Front/LookupTest.php で検証する（4.3.17）。
  */
 
 it('館非依存ページ（7.1.1 P-05, P-06）は会員専用のため未ログインでは401ではなくログイン画面へ遷移する', function (string $routeName, array $parameters) {
