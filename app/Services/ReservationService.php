@@ -39,6 +39,11 @@ use Throwable;
  * 無料鑑賞券の消費（8.2 手順5）は未実装（12章 残課題31）。`t_reservations.free_ticket_id`
  * は常に null であり、使用状態は 6.1.2 の結論に従い `active_free_ticket_id`（生成列）を
  * 単一の真実源とする。実装時は本サービスの手順3へ加えること。
+ *
+ * **キャンセル（4.4）も本サービスが持つ**（`cancel()`、工程5-o）。確定と同じく金銭に
+ * 触れるため、返金の実行（`refundOnce()`）を1箇所に集約している。確定が「返金してから
+ * 諦める」のに対し、キャンセルは「DBを確定させてから返金する」点で順序が逆になる
+ * （4.3.18）。
  */
 class ReservationService
 {
@@ -195,6 +200,131 @@ class ReservationService
     }
 
     /**
+     * 予約をキャンセルし、返金する（4.4）。
+     *
+     * **順序は「DBを確定させてから返金する」。** 逆にすると、返金が成立したのに
+     * `cancelled` へ移せなかった場合に「返金済みだが座席は占有したまま `paid`」が残り、
+     * 利用者からはキャンセルに失敗したように見えるため再実行を招く。DBを先に確定させれば、
+     * 返金が失敗しても座席は再販に戻り、残るのは「返金の未了」という運用で追える状態
+     * だけになる（`stripe_payment_intent_id` が在り `refunded_at` が null の行）。
+     *
+     * **外部との通信をトランザクションの内側に置かない**（`payAndConfirm()` と同じ。
+     * 行ロックを保持したまま Stripe の応答を待たない）。
+     *
+     * 4.4 の条件はすべて**トランザクションの内側で**判定し直す。画面を開いてから
+     * ボタンを押すまでに上映開始20分前を過ぎうるし、その間に入場されることもある。
+     */
+    public function cancel(Reservation $reservation): Cancellation
+    {
+        $cancelled = $this->releaseSeats($reservation);
+
+        if (! $cancelled instanceof Reservation) {
+            return $cancelled;
+        }
+
+        // 0円の予約は課金していないため返金するものが無い（4.5.2「決済のスキップ条件」）。
+        // **返金に触れない文言を使う**（「全額返金いたします」と案内しない）。
+        if ($cancelled->total_amount === 0) {
+            return Cancellation::done($cancelled, 'front.cancel.done_no_refund');
+        }
+
+        if (! $this->refundOnce($cancelled)) {
+            return Cancellation::refundPending($cancelled, 'front.cancel.refund_pending');
+        }
+
+        return Cancellation::done($cancelled, 'front.cancel.done');
+    }
+
+    /**
+     * キャンセルの判定と、座席の解放（4.4 の処理1〜3）を単一トランザクションで行う。
+     *
+     * 条件を満たさない場合は `Cancellation`（`Rejected`）を返し、**何も変更しない**。
+     * 成立した場合は読み直した予約を返す。
+     *
+     * **ロックの取得順は 上映回 → 予約 → 予約座席。** `SeatLockService::acquire()` と
+     * A-09 が先頭で上映回行を掴むため（4.3.8）、同じ順に揃えて逆順を作らない。
+     * あわせて、**トランザクションの最初の文をロック付きの読み取りにする**
+     * （REPEATABLE READ のスナップショットが平文の SELECT で前倒しに確定し、
+     * 以降の判定が古い値を読むため。4.3.8）。
+     *
+     * 無料鑑賞券は `t_reservations.active_free_ticket_id`（生成列）が `status` の変更に
+     * 追随して解除されるため、明示的な更新を要しない（6.1.2「無料鑑賞券の使用状態の
+     * 管理方式」。4.4 の処理3）。
+     */
+    private function releaseSeats(Reservation $reservation): Cancellation|Reservation
+    {
+        try {
+            return $this->releaseSeatsTransaction($reservation);
+        } catch (Throwable $exception) {
+            // **ロック待ちの超過・デッドラインを顧客の 500 にしない。** 先頭で上映回行を
+            // 掴むため、`SeatLockService::acquire()` や A-09 との競合は通常運用で起こりうる
+            // （4.3.8）。**課金には触れていない段階**であり、ロールバックすれば何も変わって
+            // いないため、承れなかったものとして案内して再実行を促せば足りる。
+            Log::warning('Reservation could not be cancelled.', [
+                'exception' => $exception::class,
+                'reservation_id' => $reservation->id,
+            ]);
+
+            return Cancellation::rejected('front.cancel.errors.unavailable');
+        }
+    }
+
+    /**
+     * `releaseSeats()` の本体。**確定側（`finalize()`）と同じ回数だけ再試行する。**
+     *
+     * @throws Throwable ロック待ちの超過・デッドロック。呼び出し側が捕捉する
+     */
+    private function releaseSeatsTransaction(Reservation $reservation): Cancellation|Reservation
+    {
+        return DB::transaction(function () use ($reservation): Cancellation|Reservation {
+            $now = Date::now();
+
+            $screening = Screening::whereKey($reservation->screening_id)->lockForUpdate()->first();
+
+            if ($screening === null) {
+                // **到達しない防御。** `t_reservations.screening_id` が `restrictOnDelete`
+                // であり（6.1追記表）、予約行が1件でも在れば状態を問わず削除できない。
+                // `first()` が nullable を返す以上、握り潰さず拒否として返す。
+                return Cancellation::rejected('front.cancel.errors.unavailable');
+            }
+
+            $current = Reservation::whereKey($reservation->id)->lockForUpdate()->first();
+
+            if ($current === null || $current->status !== ReservationStatus::Paid) {
+                // 既にキャンセル済み・期限切れ。二度押しと複数タブからの同時実行がここで
+                // 止まる（返金の冪等キーに頼る前の歯止め）。
+                return Cancellation::rejected('front.cancel.errors.not_cancellable');
+            }
+
+            // 4.4-5。入場済みの予約はキャンセルできない。
+            if ($current->checked_in_at !== null) {
+                return Cancellation::rejected('front.cancel.errors.checked_in');
+            }
+
+            // 4.4-1。期限の規則は `Screening` が持つ（導線の出し分けと同じものを使う）。
+            if (! $screening->acceptsCancellationAt($now)) {
+                return Cancellation::rejected('front.cancel.errors.deadline_passed');
+            }
+
+            // 4.4 の処理1。状態遷移列は直接代入する（6.1追記表。`$fillable` から外れている）。
+            $current->status = ReservationStatus::Cancelled;
+            $current->cancelled_at = $now;
+            $current->save();
+
+            // 4.4 の処理2。**親の `status` 変更と同一トランザクションで行う**（6.4.2）。
+            // `released_at` が入ると生成列 `active_seat_id` が NULL になり、
+            // `(screening_id, active_seat_id)` の一意制約から外れて再販できる。
+            // 「占有中」の条件は `occupying()` スコープに寄せる（4.3.8「条件の集約」。
+            // 境界条件が複数箇所に分かれていると片方だけの改定を許す）。
+            ReservationSeat::where('reservation_id', $current->id)
+                ->occupying()
+                ->update(['released_at' => $now]);
+
+            return $current;
+        }, self::TRANSACTION_ATTEMPTS);
+    }
+
+    /**
      * 認証の途中で前提（座席・券種）が崩れた予約を後始末する（8.2）。
      *
      * **画面が確定できないと判断した場合でも、課金を放置しない。** 3Dセキュアの認証に
@@ -332,22 +462,39 @@ class ReservationService
      */
     private function refundFailure(Reservation $reservation): ?string
     {
+        return $this->refundOnce($reservation) ? null : 'front.reservation.errors.refund_failed';
+    }
+
+    /**
+     * 返金を**予約1件につき1回だけ**実行する（8.2 / 17.3-5）。返金できた場合と、
+     * 既に返金済みで実行する必要が無かった場合に true を返す。
+     *
+     * 確定の失敗（`refundFailure()`）とキャンセル（`cancel()`）の双方がここを通る。
+     * **金銭に触れる経路を1箇所に集約する**ため、文言の出し分けは呼び出し側が行い、
+     * 本メソッドは成否だけを返す。
+     *
+     * **`refunded_at` の保存に失敗した場合の二重返金を防ぐのは冪等キー**
+     * （`refund:{予約ID}`）である。17.3-5 は `refunded_at` を主体に書いているが、
+     * 記録が落ちた経路ではキーだけが歯止めになる。キーの構成を変える場合は注意すること。
+     */
+    private function refundOnce(Reservation $reservation): bool
+    {
         $paymentIntentId = $reservation->stripe_payment_intent_id;
 
         if ($paymentIntentId === null) {
             // 課金は成立しているのに返金先が分からない状態。返金できていない以上、
             // 「全額返金いたします」とは案内しない。
-            return 'front.reservation.errors.refund_failed';
+            return false;
         }
 
         if ($reservation->refunded_at !== null) {
             // 返金は予約1件につき1回（17.3-5）。既に返金済みなので失敗ではない。
-            return null;
+            return true;
         }
 
         try {
             $this->stripe->refund($paymentIntentId, 'refund:'.$reservation->id);
-        } catch (StripeException $exception) {
+        } catch (StripeException) {
             // **返金できていない。手がかりを残す。** 10章 B-02 の除外条件は
             // `stripe_payment_intent_id` が保存されていることを前提とするため、
             // まだ未保存なら保存しておく。あわせてログにも残す（PaymentIntent のIDは
@@ -359,7 +506,7 @@ class ReservationService
                 'payment_intent_id' => $paymentIntentId,
             ]);
 
-            return $exception->messageKey;
+            return false;
         }
 
         $reservation->refunded_at = Date::now();
@@ -373,7 +520,7 @@ class ReservationService
             ]);
         }
 
-        return null;
+        return true;
     }
 
     /**

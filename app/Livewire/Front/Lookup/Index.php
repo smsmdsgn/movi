@@ -2,16 +2,19 @@
 
 namespace App\Livewire\Front\Lookup;
 
+use App\Enums\CancellationOutcome;
 use App\Enums\ContactType;
 use App\Enums\ReservationStatus;
 use App\Models\Reservation;
 use App\Models\ReservationSeat;
 use App\Models\Screening;
 use App\Models\User;
+use App\Services\ReservationService;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
@@ -80,6 +83,58 @@ class Index extends Component
     /** 照会を1度でも実行したか。未実行と「該当なし」を画面で区別するために持つ。 */
     #[Locked]
     public bool $searched = false;
+
+    /**
+     * キャンセルの確認を出している予約のID（4.4 / 4.3.18）。
+     *
+     * **真偽値ではなく予約IDで持つ。** 「確認中である」ことだけを持つと、確認を出したまま
+     * 別の予約を開いた場合に**その予約に対する確認として引き継がれ、確認を経ずに
+     * キャンセルできてしまう**。選択中の予約と一致する場合にのみ確認とみなすことで、
+     * **別の予約へ引き継がれること**が起こりえなくなる。
+     *
+     * なお同じ予約を選び直した場合は確認が開いた状態で復元される。`startOver()` では
+     * 落とすが、`backToList()` → 同じ予約の選び直しでは残る（仕様。確定ボタンの明示的な
+     * クリックは依然必要であり、確認の文言も同時に描かれる）。
+     */
+    #[Locked]
+    public ?int $confirmingCancelId = null;
+
+    /**
+     * キャンセルを試みた予約のID（4.4）。
+     *
+     * 結果の文言（`cancelNoticeKey` / `cancelErrorKey`）と対で持つ。**結果が別の予約へ
+     * 持ち越されないようにする**ためであり、理由は `confirmingCancelId` と同じ。
+     */
+    #[Locked]
+    public ?int $cancelResultId = null;
+
+    /**
+     * キャンセルが成立した場合に出す案内の文言キー（4.4）。
+     *
+     * 拒否（`cancelErrorKey`）と分けて持つ。**成立したが返金が未了**という、失敗では
+     * ないが注意を要する結果があるため（4.3.18）。
+     */
+    #[Locked]
+    public ?string $cancelNoticeKey = null;
+
+    /**
+     * キャンセルを拒否された場合の文言キー（4.4）。
+     *
+     * **`addError()` を使わない。** Livewire の errorBag はスナップショットで次の
+     * リクエストへ持ち越され、別の予約を開いても残る。成立の案内・確認と同じく
+     * 予約IDで括る（4.3.18）。
+     */
+    #[Locked]
+    public ?string $cancelErrorKey = null;
+
+    /**
+     * キャンセルは成立したが返金が未了か（4.3.18）。
+     *
+     * 見出しと配色を成立（全額返金）と分けるために持つ。**同じ見た目で出すと、
+     * 劇場への連絡が要る状態と、何もしなくてよい状態が区別できない。**
+     */
+    #[Locked]
+    public bool $cancelRefundPending = false;
 
     /**
      * 予約確定メールのリンクから開いた場合に予約番号を埋める（4.3.5）。
@@ -157,6 +212,65 @@ class Index extends Component
     }
 
     /**
+     * キャンセルの確認を出す（4.4 / 7.19-8）。
+     *
+     * **確認を1段挟む。** 返金を伴い、取り消せない操作であるため（座席は他の利用者が
+     * 購入できる状態に戻る）。照合を経た利用者の意思表示としては `matchedIds` で足りる
+     * が、誤操作まで通してしまうとやり直しが効かない（4.3.18）。
+     */
+    public function startCancel(): void
+    {
+        // 照合の範囲内であることだけを確かめる（明細の読み込みは要らない）。
+        if ($this->selectedId === null || ! in_array($this->selectedId, $this->matchedIds, strict: true)) {
+            return;
+        }
+
+        // 前回の結果（拒否の理由・成立の案内）を消す。`unavailable`（再試行の枯渇）は
+        // ボタンが残る唯一の拒否であり、消さないと理由が出たまま確認が開く。
+        $this->clearCancelResult();
+        $this->confirmingCancelId = $this->selectedId;
+    }
+
+    /** 確認をやめて明細へ戻る。 */
+    public function abortCancel(): void
+    {
+        $this->confirmingCancelId = null;
+    }
+
+    /**
+     * キャンセルを実行する（4.4）。
+     *
+     * **到達の根拠は照合の結果（`matchedIds`）である**（12章 旧残課題39 の解消。4.3.18）。
+     * 4.3.5 が非会員の導線を「予約照会で照合したうえで実行」と定めており、照合そのものが
+     * 権限になる。ここでは範囲の確認だけを行い、**4.4 の条件（期限・入場済み・状態）は
+     * `ReservationService` がトランザクションの内側で判定し直す**。画面を開いてから
+     * ボタンを押すまでに期限を過ぎうるため、画面側の判定を信用しない。
+     */
+    public function cancel(ReservationService $reservations): void
+    {
+        $reservation = $this->selectedReservation();
+
+        // **確認が「この予約に対して」出されたものであることを確かめる。** 別の予約で
+        // 確認を出したまま画面を移った場合に、確認を経ずにキャンセルさせない（4.3.18）。
+        if ($reservation === null || $this->confirmingCancelId !== $reservation->id) {
+            return;
+        }
+
+        $result = $reservations->cancel($reservation);
+
+        $this->confirmingCancelId = null;
+        $this->cancelResultId = $reservation->id;
+
+        $rejected = $result->outcome === CancellationOutcome::Rejected;
+
+        // **文言の出し分けはサービスが済ませている**（4.3.18）。画面は成立と拒否の
+        // どちらとして出すかだけを決める。
+        $this->cancelNoticeKey = $rejected ? null : $result->messageKey;
+        $this->cancelErrorKey = $rejected ? $result->messageKey : null;
+        $this->cancelRefundPending = $result->outcome === CancellationOutcome::CancelledWithoutRefund;
+    }
+
+    /**
      * 入力し直す。照合の結果を破棄し、フォームだけの状態へ戻す。
      *
      * 入力値そのものは消さない。打ち直しの手間を増やさないためであり、
@@ -167,10 +281,21 @@ class Index extends Component
         // 方式の切り替え（`updatedMethod()`）と揃える。前の照会の誤りを残したまま
         // フォームへ戻すと、まだ直っていないかのように見える。
         $this->resetErrorBag();
+        $this->clearCancelResult();
 
         $this->matchedIds = [];
         $this->selectedId = null;
         $this->searched = false;
+        $this->confirmingCancelId = null;
+    }
+
+    /** キャンセルの結果（成立の案内・拒否の理由）を破棄する。 */
+    private function clearCancelResult(): void
+    {
+        $this->cancelResultId = null;
+        $this->cancelNoticeKey = null;
+        $this->cancelErrorKey = null;
+        $this->cancelRefundPending = false;
     }
 
     public function render(): View
@@ -188,7 +313,54 @@ class Index extends Component
             'methodContact' => self::METHOD_CONTACT,
             'fields' => $this->formFields(),
             'weekdays' => __('front.schedule.weekdays'),
+            // キャンセルの導線（7.19-8）。**画面の判定は案内のためだけのもの**であり、
+            // 実行の可否は `ReservationService` がトランザクションの内側で決め直す。
+            'cancelState' => $selected === null ? null : $this->cancelState($selected),
+            // 確認・成立の案内・拒否の理由は**選択中の予約のものだけ**を出す（4.3.18）。
+            // 持ち越しを画面側で断つことで、状態を落とし忘れても別の予約へ漏れない。
+            'confirmingCancel' => $selected !== null && $this->confirmingCancelId === $selected->id,
+            'cancelledNotice' => $this->cancelResultFor($selected, $this->cancelNoticeKey),
+            'cancelError' => $this->cancelResultFor($selected, $this->cancelErrorKey),
+            'cancelRefundPending' => $this->cancelRefundPending,
         ]);
+    }
+
+    /** キャンセルの結果の文言を、選択中の予約のものに限って返す（4.3.18）。 */
+    private function cancelResultFor(?Reservation $selected, ?string $messageKey): ?string
+    {
+        if ($selected === null || $this->cancelResultId !== $selected->id) {
+            return null;
+        }
+
+        return $messageKey;
+    }
+
+    /**
+     * キャンセルの導線をどう出すか（4.4 / 7.19-8）。
+     *
+     * `null` を返すのは、そもそも導線を出さない場合（キャンセル済み）。
+     *
+     * @return array{available: bool, noticeKey: string|null}
+     */
+    private function cancelState(Reservation $reservation): ?array
+    {
+        if ($reservation->status !== ReservationStatus::Paid) {
+            return null;
+        }
+
+        // 4.4-5。入場済みは期限より先に判定する。期限内であっても入場していれば
+        // 「期限を過ぎた」という案内は事実と異なる。
+        if ($reservation->isCheckedIn()) {
+            return ['available' => false, 'noticeKey' => 'front.cancel.unavailable.checked_in'];
+        }
+
+        // 4.4-1。期限の規則は `Screening` が持つ（`ReservationService::cancel()` の
+        // 判定と同じものを使う。境界の向きを画面側に複製しない）。
+        if (! $reservation->screening->acceptsCancellationAt(Date::now())) {
+            return ['available' => false, 'noticeKey' => 'front.cancel.unavailable.deadline'];
+        }
+
+        return ['available' => true, 'noticeKey' => null];
     }
 
     /**

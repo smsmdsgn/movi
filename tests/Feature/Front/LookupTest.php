@@ -9,6 +9,7 @@ use App\Models\Screening;
 use App\Models\Seat;
 use App\Models\TicketType;
 use App\Models\User;
+use App\Services\StripeException;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\RateLimiter;
 use Livewire\Features\SupportTesting\Testable;
@@ -66,9 +67,12 @@ function lookupReservation(
         'total_amount' => $seatAmount * $seatCount,
     ]);
 
-    if ($status === ReservationStatus::Cancelled) {
-        $reservation->forceFill(['cancelled_at' => CarbonImmutable::now()])->save();
-    }
+    // 確定済みの予約は PaymentIntent のIDを持つ（4.3.15）。キャンセルの返金先になるため
+    // 省略しない。**一意制約があるため予約IDから組み立てる**（1テストで複数件作るケースがある）。
+    $reservation->forceFill([
+        'stripe_payment_intent_id' => 'pi_test_'.$reservation->id,
+        'cancelled_at' => $status === ReservationStatus::Cancelled ? CarbonImmutable::now() : null,
+    ])->save();
 
     foreach ($seats as $seat) {
         $row = ReservationSeat::create([
@@ -451,4 +455,231 @@ it('予約確定メールのリンクから開くと予約番号が埋まる（4
     $this->get(route('front.lookup.index', ['no' => $reservation->formattedReservationNo()]))
         ->assertOk()
         ->assertSee($reservation->formattedReservationNo());
+});
+
+/*
+ * キャンセル（4.4 / 7.19-8 / 4.3.18）。**画面の導線と到達の可否**を固定する。
+ * 判定・座席の解放・返金そのものは tests/Feature/Reservation/ReservationCancelTest.php が担保する。
+ */
+
+it('キャンセルは確認を1段挟んでから実行する（4.3.18）', function () {
+    fakeStripeService(settledCharge(4000));
+    ['reservation' => $reservation] = lookupReservation(startsAt: CarbonImmutable::now()->addDay());
+
+    $component = lookupByNumber($reservation->reservation_no)
+        ->assertSee(__('front.cancel.start'))
+        // 確認を出す前に実行しても何も起きない。
+        ->call('cancel')
+        ->assertDontSee(__('front.cancel.done_heading'));
+
+    expect($reservation->refresh()->status)->toBe(ReservationStatus::Paid);
+
+    $component->call('startCancel')
+        ->assertSee(__('front.cancel.confirm_heading'))
+        ->call('cancel')
+        ->assertSee(__('front.cancel.done_heading'))
+        ->assertSee(__('front.cancel.done'));
+
+    expect($reservation->refresh()->status)->toBe(ReservationStatus::Cancelled);
+});
+
+it('確認をやめればキャンセルしない（7.19-8）', function () {
+    fakeStripeService(settledCharge(4000));
+    ['reservation' => $reservation] = lookupReservation(startsAt: CarbonImmutable::now()->addDay());
+
+    lookupByNumber($reservation->reservation_no)
+        ->call('startCancel')
+        ->call('abortCancel')
+        ->assertDontSee(__('front.cancel.confirm_heading'))
+        ->assertSee(__('front.cancel.start'));
+
+    expect($reservation->refresh()->status)->toBe(ReservationStatus::Paid);
+});
+
+it('照合を経ていなければキャンセルできない（17.15 T-11）', function () {
+    fakeStripeService(settledCharge(4000));
+    ['reservation' => $reservation] = lookupReservation(startsAt: CarbonImmutable::now()->addDay());
+
+    // 照合を経ずに confirmingCancel を立てる経路は無い（#[Locked]）。
+    Livewire::test(Index::class)
+        ->call('startCancel')
+        ->call('cancel');
+
+    expect($reservation->refresh()->status)->toBe(ReservationStatus::Paid);
+});
+
+it('期限を過ぎた予約にはキャンセルの導線を出さない（4.4-1）', function () {
+    ['reservation' => $reservation] = lookupReservation(startsAt: CarbonImmutable::now()->addMinutes(10));
+
+    lookupByNumber($reservation->reservation_no)
+        ->assertSee(__('front.cancel.unavailable.deadline'))
+        ->assertDontSee(__('front.cancel.start'));
+});
+
+it('入場済みの予約にはキャンセルの導線を出さない（4.4-5）', function () {
+    ['reservation' => $reservation] = lookupReservation(startsAt: CarbonImmutable::now()->addDay());
+    $reservation->forceFill(['checked_in_at' => CarbonImmutable::now()])->save();
+
+    lookupByNumber($reservation->reservation_no)
+        ->assertSee(__('front.cancel.unavailable.checked_in'))
+        ->assertDontSee(__('front.cancel.start'));
+});
+
+it('キャンセル済みの予約にはキャンセルの節そのものを出さない（7.19-8）', function () {
+    ['reservation' => $reservation] = lookupReservation(
+        status: ReservationStatus::Cancelled,
+        startsAt: CarbonImmutable::now()->addDay(),
+    );
+
+    lookupByNumber($reservation->reservation_no)
+        ->assertSee(__('front.lookup.status.cancelled'))
+        ->assertDontSee(__('front.cancel.heading'))
+        ->assertDontSee(__('front.cancel.start'));
+});
+
+it('返金に失敗した場合は成立と未了の双方を伝える（4.3.18）', function () {
+    $stripe = fakeStripeService(settledCharge(4000));
+    $stripe->refundError = StripeException::refundFailed();
+    ['reservation' => $reservation] = lookupReservation(startsAt: CarbonImmutable::now()->addDay());
+
+    lookupByNumber($reservation->reservation_no)
+        ->call('startCancel')
+        ->call('cancel')
+        ->assertSee(__('front.cancel.done_heading'))
+        ->assertSee(__('front.cancel.refund_pending'));
+
+    expect($reservation->refresh()->status)->toBe(ReservationStatus::Cancelled);
+});
+
+it('画面に導線が出ていても、実行時に期限を過ぎていれば拒む（4.3.18）', function () {
+    fakeStripeService(settledCharge(4000));
+    $startsAt = CarbonImmutable::now()->addHour();
+    ['reservation' => $reservation] = lookupReservation(startsAt: $startsAt);
+
+    $component = lookupByNumber($reservation->reservation_no)
+        ->assertSee(__('front.cancel.start'))
+        ->call('startCancel');
+
+    // 確認を出してからボタンを押すまでの間に期限を過ぎた。画面側の判定は信用しない。
+    CarbonImmutable::setTestNow($startsAt->subMinutes(5));
+
+    $component->call('cancel')
+        ->assertSee(__('front.cancel.errors.deadline_passed'))
+        ->assertDontSee(__('front.cancel.done_heading'));
+
+    expect($reservation->refresh()->status)->toBe(ReservationStatus::Paid);
+
+    CarbonImmutable::setTestNow();
+});
+
+it('キャンセルの完了案内が、別の予約を開いたときに持ち越されない（4.3.18）', function () {
+    fakeStripeService(settledCharge(4000));
+    // 同じ「上映日」で2件を照会するため、日内に収める（23時台の実行で翌日へ転ばせない）。
+    $startsAt = CarbonImmutable::now()->addDay()->startOfDay()->addHours(10);
+    ['reservation' => $first] = lookupReservation(startsAt: $startsAt);
+    ['reservation' => $second] = lookupReservation(startsAt: $startsAt->addHour());
+
+    $component = Livewire::test(Index::class)
+        ->set('method', Index::METHOD_CONTACT)
+        ->set('email', LOOKUP_EMAIL)
+        ->set('phone', LOOKUP_PHONE)
+        ->set('screeningDate', $startsAt->format('Y-m-d'))
+        ->call('search')
+        ->call('select', $first->id)
+        ->call('startCancel')
+        ->call('cancel')
+        ->assertSee(__('front.cancel.done_heading'));
+
+    // **まだ `paid` の予約に「返金いたします」と案内してはならない。** あわせて、
+    // その予約本来のキャンセル導線が消えてもいけない。
+    $component->call('backToList')
+        ->call('select', $second->id)
+        ->assertDontSee(__('front.cancel.done_heading'))
+        ->assertSee(__('front.cancel.start'));
+
+    expect($second->refresh()->status)->toBe(ReservationStatus::Paid);
+});
+
+it('確認を出したまま別の予約へ移っても、確認を経ずにキャンセルできない（4.3.18）', function () {
+    fakeStripeService(settledCharge(4000));
+    // 同上。日跨ぎで照合が1件になると、意図と違う経路を検証することになる。
+    $startsAt = CarbonImmutable::now()->addDay()->startOfDay()->addHours(10);
+    ['reservation' => $first] = lookupReservation(startsAt: $startsAt);
+    ['reservation' => $second] = lookupReservation(startsAt: $startsAt->addHour());
+
+    $component = Livewire::test(Index::class)
+        ->set('method', Index::METHOD_CONTACT)
+        ->set('email', LOOKUP_EMAIL)
+        ->set('phone', LOOKUP_PHONE)
+        ->set('screeningDate', $startsAt->format('Y-m-d'))
+        ->call('search')
+        ->call('select', $first->id)
+        ->call('startCancel')
+        ->assertSee(__('front.cancel.confirm_heading'));
+
+    // 確定せずに別の予約を開く。確認は引き継がれない。
+    $component->call('backToList')
+        ->call('select', $second->id)
+        ->assertDontSee(__('front.cancel.confirm_heading'))
+        ->assertSee(__('front.cancel.start'))
+        ->call('cancel')
+        ->assertDontSee(__('front.cancel.done_heading'));
+
+    expect($second->refresh()->status)->toBe(ReservationStatus::Paid)
+        ->and($first->refresh()->status)->toBe(ReservationStatus::Paid);
+});
+
+it('返金先が分からない予約はキャンセルを成立させたうえで未了を伝える（4.3.18）', function () {
+    $stripe = fakeStripeService(settledCharge(4000));
+    ['reservation' => $reservation] = lookupReservation(startsAt: CarbonImmutable::now()->addDay());
+    $reservation->forceFill(['stripe_payment_intent_id' => null])->save();
+
+    lookupByNumber($reservation->reservation_no)
+        ->call('startCancel')
+        ->call('cancel')
+        ->assertSee(__('front.cancel.refund_pending'));
+
+    expect($reservation->refresh()->status)->toBe(ReservationStatus::Cancelled)
+        // 返金先が無いため Refund API を呼びようがない。
+        ->and($stripe->refunds)->toBe([]);
+});
+
+it('支払金額0円の予約は返金に触れない案内を出す（4.5.2）', function () {
+    fakeStripeService(settledCharge(0));
+    ['reservation' => $reservation] = lookupReservation(startsAt: CarbonImmutable::now()->addDay(), seatAmount: 0);
+
+    lookupByNumber($reservation->reservation_no)
+        ->call('startCancel')
+        ->call('cancel')
+        ->assertSee(__('front.cancel.done_no_refund'))
+        ->assertDontSee(__('front.cancel.done'));
+});
+
+it('キャンセルを承れなかった理由も、別の予約へ持ち越されない（4.3.18）', function () {
+    fakeStripeService(settledCharge(4000));
+    // 同じ「上映日」で2件を照会するため日内に収める。1件目は入場済みでキャンセル不可。
+    $startsAt = CarbonImmutable::now()->addDay()->startOfDay()->addHours(10);
+    ['reservation' => $first] = lookupReservation(startsAt: $startsAt);
+    ['reservation' => $second] = lookupReservation(startsAt: $startsAt->addHour());
+
+    $component = Livewire::test(Index::class)
+        ->set('method', Index::METHOD_CONTACT)
+        ->set('email', LOOKUP_EMAIL)
+        ->set('phone', LOOKUP_PHONE)
+        ->set('screeningDate', $startsAt->format('Y-m-d'))
+        ->call('search')
+        ->call('select', $first->id)
+        ->call('startCancel');
+
+    // 確認を出した後、実行までの間に入場された。サーバー側の判定で拒否される。
+    $first->forceFill(['checked_in_at' => CarbonImmutable::now()])->save();
+
+    $component->call('cancel')
+        ->assertSee(__('front.cancel.errors.checked_in'));
+
+    // 別の予約を開いたとき、前の予約の理由が残らない。
+    $component->call('backToList')
+        ->call('select', $second->id)
+        ->assertDontSee(__('front.cancel.errors.checked_in'))
+        ->assertSee(__('front.cancel.start'));
 });

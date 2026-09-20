@@ -9,6 +9,11 @@
     - $methodNumber / $methodContact: 照会方式の値（4.3.5 の方式A・B）
     - $fields: 照会フォームの入力欄（方式ごとの並びと現在値）
     - $weekdays: 曜日の表記
+    - $confirmingCancel: この予約に対する確認を出しているか
+    - $cancelledNotice: この予約のキャンセルが成立した場合の案内の文言キー（無ければ null）
+    - $cancelError: この予約のキャンセルを承れなかった理由の文言キー（無ければ null）
+    - $cancelRefundPending: キャンセルは成立したが返金が未了か（見出しと配色を分ける）
+    - $cancelState: キャンセルの導線（4.4 / 7.19-8）。{available, noticeKey}、出さない場合は null
 
     **列挙型・クラス定数・入力欄の組み立ては `render()` から値で受け取る。** 先頭の
     PHP ブロックは docblock だけに留める（P-34・P-37 のビューと同じ扱い）。
@@ -31,7 +36,12 @@
 <div>
     {{-- ライブリージョンはルート直下に常設し、中身だけを差し替える（P-32〜P-34 と同じ扱い）。 --}}
     <div role="alert" aria-live="assertive" class="empty:hidden">
-        @if ($errors->isNotEmpty())
+        @if ($cancelError !== null)
+            {{-- キャンセルを承れなかった理由（4.4）。課金にも座席にも触れていない。 --}}
+            <p class="mb-4 border border-red-700 bg-red-50 p-3 text-sm text-red-900">
+                {{ __($cancelError) }}
+            </p>
+        @elseif ($errors->isNotEmpty())
             <p class="mb-4 border border-red-700 bg-red-50 p-3 text-sm text-red-900">
                 {{ $errors->first() }}
             </p>
@@ -128,7 +138,72 @@
             <p class="mt-2 text-sm">{{ __('front.lookup.receipt_pending') }}</p>
         </section>
 
-        {{-- キャンセル（4.3.5「実行可能な操作」／4.4）は工程5-o で加える。 --}}
+        {{-- キャンセル（4.3.5「実行可能な操作」／4.4 / 7.19-8）。 --}}
+        @if ($cancelledNotice !== null)
+            {{-- 成立した後。導線を消し、結果だけを残す。
+
+                 **返金が未了の場合は見出しと配色を分ける。** 同じ見た目で出すと、劇場への
+                 連絡が要る状態と、何もしなくてよい状態が区別できない（4.3.18）。
+
+                 `role="status"` を付けるのは、返金を伴う取り消せない操作の直後に押した
+                 ボタンが消えるため、読み上げ環境で結果が伝わらないため（4.3.10 が P-32 で
+                 定めた「案内はライブリージョンへ流す」方針に揃える）。 --}}
+            <section
+                role="status"
+                aria-live="polite"
+                aria-labelledby="lookup-cancel-heading"
+                class="mt-4 border-2 p-4 {{ $cancelRefundPending ? 'border-red-800 bg-red-50' : 'border-stone-400 bg-stone-50' }}"
+            >
+                <h3 id="lookup-cancel-heading" class="font-bold {{ $cancelRefundPending ? 'text-red-900' : '' }}">
+                    {{ __($cancelRefundPending ? 'front.cancel.refund_pending_heading' : 'front.cancel.done_heading') }}
+                </h3>
+                <p class="mt-2 text-sm">{{ __($cancelledNotice) }}</p>
+            </section>
+        @elseif ($cancelState !== null)
+            <section aria-labelledby="lookup-cancel-heading" class="mt-4 border border-stone-300 p-4">
+                <h3 id="lookup-cancel-heading" class="font-bold">{{ __('front.cancel.heading') }}</h3>
+
+                @if (! $cancelState['available'])
+                    {{-- 期限切れ・入場済み。理由を示し、ボタンは出さない。 --}}
+                    <p class="mt-2 text-sm">{{ __($cancelState['noticeKey']) }}</p>
+                @elseif ($confirmingCancel)
+                    {{-- 取り消せない操作のため確認を1段挟む（4.3.18）。 --}}
+                    <p class="mt-2 font-bold text-red-900">{{ __('front.cancel.confirm_heading') }}</p>
+                    <p class="mt-1 text-sm">{{ __('front.cancel.confirm_lead') }}</p>
+                    <p class="mt-1 text-sm">{{ __('front.cancel.refund_note') }}</p>
+
+                    <div class="mt-4 flex flex-wrap gap-3">
+                        {{-- 二重送信を抑える。サーバー側は `status` の判定で2本目を止めるため
+                             金銭は安全だが、2本目の応答が「承れません」を描き、成立したのに
+                             失敗したように見える（P-37 の確定ボタンと同じ手当て）。 --}}
+                        <button
+                            type="button"
+                            wire:click="cancel"
+                            wire:loading.attr="disabled"
+                            wire:target="cancel"
+                            class="bg-red-800 px-6 py-3 font-bold text-white hover:bg-red-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700"
+                        >
+                            {{ __('front.cancel.submit') }}
+                        </button>
+
+                        <button type="button" wire:click="abortCancel" class="border border-stone-400 px-4 py-3 text-sm underline decoration-stone-400 hover:bg-stone-100">
+                            {{ __('front.cancel.abort') }}
+                        </button>
+                    </div>
+                @else
+                    <p class="mt-2 text-sm">{{ __('front.cancel.lead') }}</p>
+                    <p class="mt-1 text-sm text-stone-600">{{ __('front.cancel.refund_note') }}</p>
+
+                    <button
+                        type="button"
+                        wire:click="startCancel"
+                        class="mt-3 border-2 border-red-800 px-4 py-3 text-sm font-bold text-red-900 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700"
+                    >
+                        {{ __('front.cancel.start') }}
+                    </button>
+                @endif
+            </section>
+        @endif
 
         <div class="mt-6 flex flex-wrap gap-3">
             @if (count($matchedIds) > 1)

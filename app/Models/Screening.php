@@ -40,6 +40,14 @@ class Screening extends Model
      */
     public const int SALES_START_DAYS_BEFORE = 3;
 
+    /**
+     * キャンセルの受付期限は上映開始の何分前までか（4.4-1）。
+     * 導線の出し分け（P-07・将来の P-06）と `ReservationService::cancel()` の双方が
+     * 本定数と `acceptsCancellationAt()` を参照し、期限の規則を1箇所に持つ
+     * （`SALES_START_DAYS_BEFORE` と `isOnSale()` の関係と同じ扱い）。
+     */
+    public const int CANCEL_DEADLINE_MINUTES = 20;
+
     protected function casts(): array
     {
         return [
@@ -76,6 +84,26 @@ class Screening extends Model
         $now ??= Date::now();
 
         return ! $this->isBeforeSale($now) && $this->starts_at->isAfter($now);
+    }
+
+    /**
+     * キャンセルの受付期限（4.4-1）。上映開始の20分前。
+     */
+    public function cancelDeadline(): CarbonImmutable
+    {
+        return $this->starts_at->subMinutes(self::CANCEL_DEADLINE_MINUTES);
+    }
+
+    /**
+     * キャンセルを受け付けられる時刻か（4.4-1）。
+     *
+     * **期限ちょうどは締め切る**（4.3.18 で境界を一点に固定した）。表示側（P-07 の
+     * 導線の出し分け）と実行側（`ReservationService::cancel()`）の双方がここを通る。
+     * 境界の向きを2箇所に複製すると、片方だけが改定されうる（`isOnSale()` と同じ理由）。
+     */
+    public function acceptsCancellationAt(?CarbonImmutable $now = null): bool
+    {
+        return ($now ?? Date::now())->isBefore($this->cancelDeadline());
     }
 
     /**
