@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Enums\BannerPosition;
 use App\Enums\SeatDisplayClass;
 use App\Models\Cinema;
+use App\Models\FreeTicket;
 use App\Models\Screening;
 use App\Models\TicketType;
 
@@ -395,8 +396,11 @@ class SeedConfig
     /**
      * 無料鑑賞券1枚への交換に必要なスタンプ数（4.5.1-2）。`GionReservationSeeder` が
      * 実際に5個での交換を再現する際に使う。`RESERVATION_STAMP_CAP` の算出元でもある。
+     *
+     * **値は持たず `FreeTicket` を参照する**（工程6-a）。同じ業務規則を画面・バッチ・
+     * シーダーが別々に持つと、片方だけの改定を許す（4.5.3）。
      */
-    public const int STAMPS_PER_FREE_TICKET = 5;
+    public const int STAMPS_PER_FREE_TICKET = FreeTicket::STAMPS_PER_TICKET;
 
     /**
      * `ReservationSeeder`（他6館）において、1会員が未交換のまま保持できるスタンプ数の

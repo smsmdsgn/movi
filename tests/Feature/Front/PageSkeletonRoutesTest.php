@@ -30,6 +30,10 @@ it('館非依存ページ（7.1.1 P-08〜P-20）のルートが画面IDを返す
  *
  * P-07（予約照会）は工程5-nで実装したため、同じく対象から外した。照合とレート制限を
  * 含むため tests/Feature/Front/LookupTest.php で検証する（4.3.17）。
+ *
+ * P-05（マイページ）は工程6-aで実装したため、画面IDを返す対象から外した（未ログイン時に
+ * ログイン画面へ遷移することは引き続きここで検証する）。表示項目は
+ * tests/Feature/Front/MyPageTest.php で検証する（4.5.3）。
  */
 
 it('館非依存ページ（7.1.1 P-05, P-06）は会員専用のため未ログインでは401ではなくログイン画面へ遷移する', function (string $routeName, array $parameters) {
@@ -42,7 +46,7 @@ it('館非依存ページ（7.1.1 P-05, P-06）は会員専用のため未ログ
     'P-06 マイページ予約詳細' => ['front.mypage.reservation.show', ['id' => 1]],
 ]);
 
-it('館非依存ページ（7.1.1 P-05, P-06）はログイン時に画面IDを返す', function (string $routeName, string $screenId, array $parameters) {
+it('館非依存ページ（7.1.1 P-06）はログイン時に画面IDを返す', function (string $routeName, string $screenId, array $parameters) {
     createCinema('gion', '祇園ムビ');
 
     $this->actingAs(User::factory()->create())
@@ -50,6 +54,5 @@ it('館非依存ページ（7.1.1 P-05, P-06）はログイン時に画面IDを�
         ->assertOk()
         ->assertSee($screenId);
 })->with([
-    'P-05 マイページ' => ['front.mypage.index', 'P-05', []],
     'P-06 マイページ予約詳細' => ['front.mypage.reservation.show', 'P-06', ['id' => 1]],
 ]);

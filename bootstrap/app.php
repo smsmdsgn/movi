@@ -27,7 +27,11 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->redirectUsersTo(function (Request $request): string {
             if (! $request->is('admin', 'admin/*')) {
-                return route('dashboard');
+                // ログイン済みの会員が `/login` 等（`guest` ミドルウェア配下）を再訪問した
+                // 場合の行き先。**ログイン成功時の遷移先（`config/fortify.php` の `home`）と
+                // 揃える**（4.5.3）。片方だけ変えると、同じ「ログイン済みの会員が行く場所」が
+                // 2系統になる。`/dashboard` は Flux UI の置き場であり顧客向け画面ではない。
+                return route('front.mypage.index');
             }
 
             // ダッシュボードへ到達できないロール（gate）がログイン済みで

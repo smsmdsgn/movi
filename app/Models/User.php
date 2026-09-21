@@ -84,4 +84,18 @@ class User extends Authenticatable
     {
         return $this->hasMany(FreeTicket::class, 'user_id');
     }
+
+    /**
+     * まだ無料鑑賞券へ交換していないスタンプ（4.5.1-2）。
+     *
+     * **カウンタ列を持たず、行数を集計して求める**（4.5.1 実装方針）。交換済みの
+     * スタンプは `free_ticket_id` に発行した券が入るため、「0個にリセットする」は
+     * 行の削除ではなく交換先の記録で表す（履歴が残る）。
+     *
+     * @return HasMany<Stamp, $this>
+     */
+    public function unexchangedStamps(): HasMany
+    {
+        return $this->stamps()->whereNull('free_ticket_id');
+    }
 }

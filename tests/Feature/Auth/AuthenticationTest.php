@@ -17,9 +17,11 @@ test('users can authenticate using the login screen', function () {
         'password' => 'password',
     ]);
 
+    // ログイン後はマイページ（P-05、7.14）へ送る。`config/fortify.php` の `home` を
+    // スターターキット既定の `/dashboard` から変更した（工程6-a。4.5.3）。
     $response
         ->assertSessionHasNoErrors()
-        ->assertRedirect(route('dashboard', absolute: false));
+        ->assertRedirect(route('front.mypage.index', absolute: false));
 
     $this->assertAuthenticated();
 });
