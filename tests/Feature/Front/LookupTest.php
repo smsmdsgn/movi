@@ -228,19 +228,27 @@ it('キャンセル済みの予約も照会でき、上映回が変わりうる�
     lookupByNumber($reservation->reservation_no)
         ->assertSee(__('front.lookup.status.cancelled'))
         ->assertSee(__('front.lookup.cancelled_note'))
+        ->assertSee(__('front.lookup.cancelled_at'))
         // キャンセル済みに入場の案内は出さない。
         ->assertDontSee(__('front.lookup.entry_pending'));
 });
 
-it('お支払い前・期限切れの予約は照会の対象外とする（4.3.17）', function (ReservationStatus $status) {
-    ['reservation' => $reservation] = lookupReservation(status: $status);
+/*
+ * 状態の条件は `Reservation::visibleToCustomer()` が1箇所で持つ（4.5.4）。**`UNION` の
+ * 両辺（非会員・会員）で確かめる。** 片側だけだと、もう一方から条件が落ちても検出できない。
+ */
+it('お支払い前・期限切れの予約は照会の対象外とする（4.3.17）', function (ReservationStatus $status, bool $isMember) {
+    $user = $isMember ? User::factory()->create(['email' => LOOKUP_EMAIL, 'phone' => LOOKUP_PHONE]) : null;
+    ['reservation' => $reservation] = lookupReservation(status: $status, user: $user);
 
     lookupByNumber($reservation->reservation_no)
         ->assertSee(__('front.lookup.not_found'))
         ->assertDontSee($reservation->formattedReservationNo());
 })->with([
-    'pending' => [ReservationStatus::Pending],
-    'expired' => [ReservationStatus::Expired],
+    'pending（非会員）' => [ReservationStatus::Pending, false],
+    'expired（非会員）' => [ReservationStatus::Expired, false],
+    'pending（会員）' => [ReservationStatus::Pending, true],
+    'expired（会員）' => [ReservationStatus::Expired, true],
 ]);
 
 it('複数件が該当する場合は一覧を出し、選択で明細へ進む（4.3.5）', function () {
@@ -521,6 +529,8 @@ it('入場済みの予約にはキャンセルの導線を出さない（4.4-5�
     $reservation->forceFill(['checked_in_at' => CarbonImmutable::now()])->save();
 
     lookupByNumber($reservation->reservation_no)
+        // 明細の注記（7.19-1）とキャンセルの理由（7.19-8）は別の節である。
+        ->assertSee(__('front.lookup.checked_in_note'))
         ->assertSee(__('front.cancel.unavailable.checked_in'))
         ->assertDontSee(__('front.cancel.start'));
 });

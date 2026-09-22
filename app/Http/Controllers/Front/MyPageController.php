@@ -109,9 +109,9 @@ class MyPageController extends Controller
     /**
      * 一覧に共通の絞り込みと読み込み。
      *
-     * **対象は `paid` と `cancelled` に限る**（予約照会 P-07 と同じ。4.3.17）。
-     * `pending` は課金の直前に作られる行であり、`expired` は座席を確保できないまま
-     * 終わった行で、いずれも利用者に示す内容を持たない。
+     * **対象は `paid` と `cancelled` に限る**（`Reservation::visibleToCustomer()`。
+     * 予約照会 P-07・予約詳細 P-06 と同じ条件をモデルから引く。4.3.8「条件の集約」/
+     * 4.3.17）。
      *
      * @return Builder<Reservation>
      */
@@ -121,7 +121,7 @@ class MyPageController extends Controller
         // 17.15 T-11）。`getQuery()` は関連が付けた外部キーの条件を保ったまま
         // クエリビルダを返す。
         return $user->reservations()->getQuery()
-            ->whereIn('status', [ReservationStatus::Paid, ReservationStatus::Cancelled])
+            ->visibleToCustomer()
             // 一覧が触れる関連（`preventLazyLoading`）。座席は枚数だけを出すため
             // `withCount()` で足りる。
             ->with(['screening.booking.movie', 'screening.booking.cinema'])

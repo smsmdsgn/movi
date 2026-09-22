@@ -9,6 +9,7 @@ use App\Http\Controllers\Front\IdentifyController;
 use App\Http\Controllers\Front\LookupController;
 use App\Http\Controllers\Front\MovieController;
 use App\Http\Controllers\Front\MyPageController;
+use App\Http\Controllers\Front\MyPageReservationController;
 use App\Http\Controllers\Front\PagePlaceholderController;
 use App\Http\Controllers\Front\PaymentController;
 use App\Http\Controllers\Front\PlaceholderController;
@@ -66,7 +67,9 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
     | PagePlaceholderController と異なりコントローラでは解決しない。
     |
     | P-05（マイページ）は工程6-aで実装済み（MyPageController。7.14）。P-06（予約詳細）
-    | への導線は当面 PagePlaceholderController へ送る（12章 残課題8。工程6-bで差し替える）。
+    | は工程6-bで実装済み（MyPageReservationController ＋ Livewire。4.5.4 / 7.14）。
+    | URLのIDから他人の予約へ到達できないことは ReservationPolicy::viewOwn() が担保する
+    | （17.2.1-2。認められない場合は 404）。
     |
     */
     Route::get('/', ChainTopController::class)->name('front.home');
@@ -74,7 +77,7 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
     Route::name('front.')->group(function () {
         Route::middleware('auth')->group(function () {
             Route::get('mypage', MyPageController::class)->name('mypage.index');
-            Route::get('mypage/reservations/{id}', PagePlaceholderController::class)->defaults('screenId', 'P-06')->name('mypage.reservation.show')->whereNumber('id');
+            Route::get('mypage/reservations/{id}', MyPageReservationController::class)->name('mypage.reservation.show')->whereNumber('id');
         });
         Route::get('lookup', LookupController::class)->name('lookup.index');
         Route::get('prices', PagePlaceholderController::class)->defaults('screenId', 'P-08')->name('prices.index');

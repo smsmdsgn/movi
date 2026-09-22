@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -137,6 +138,44 @@ class Reservation extends Model
     public function isCheckedIn(): bool
     {
         return $this->checked_in_at !== null;
+    }
+
+    /**
+     * 利用者に示してよい予約（`paid` と `cancelled`）。
+     *
+     * `pending` は課金の直前に作られる行であり（4.3.15）、利用者から見れば成立して
+     * いない。`expired` は座席を確保できないまま終わった行で、いずれも示す内容を
+     * 持たない。`cancelled` を含めるのは、返金の状況を確認する経路が他に無いためである
+     * （4.3.16）。
+     *
+     * **顧客向けの画面はこのスコープを使い、`whereIn('status', …)` を直接書かない**
+     * （4.3.8「条件の集約」。予約照会 P-07・マイページ P-05・予約詳細 P-06 が同じ
+     * 条件を持つため、片方だけの改定を許さない）。予約完了（P-38）は `paid` のみを
+     * 示すため対象外である（4.3.16）。
+     *
+     * @param  Builder<Reservation>  $query
+     * @return Builder<Reservation>
+     */
+    #[Scope]
+    protected function visibleToCustomer(Builder $query): Builder
+    {
+        return $query->whereIn('status', [ReservationStatus::Paid, ReservationStatus::Cancelled]);
+    }
+
+    /**
+     * 座席表（P-31）と同じ並びの予約座席（7.19-4）。
+     *
+     * **読み込み済みの関連を並べ替えるだけで、追加のクエリを出さない。** 明細を出す
+     * 画面（P-07 / P-06 / P-38）がそれぞれ同じ並べ替えを書かないよう、モデルへ寄せる
+     * （4.3.8「条件の集約」）。呼び出し側は `seats.seat` を読み込んでおくこと。
+     *
+     * @return Collection<int, ReservationSeat>
+     */
+    public function seatsInGridOrder(): Collection
+    {
+        return $this->seats
+            ->sortBy(fn (ReservationSeat $row): array => [$row->seat->grid_row, $row->seat->grid_col])
+            ->values();
     }
 
     /**

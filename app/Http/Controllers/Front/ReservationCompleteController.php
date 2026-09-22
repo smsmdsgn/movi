@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Front;
 use App\Enums\ReservationStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Reservation;
-use App\Models\ReservationSeat;
 use App\Services\CurrentCinemaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -55,10 +54,9 @@ class ReservationCompleteController extends Controller
         return view('front.reservation.complete', [
             'reservation' => $reservation,
             'screening' => $reservation->screening,
-            // 座席表（P-31）・予約確認（P-37）と同じ並び順で示す。
-            'seats' => $reservation->seats
-                ->sortBy(fn (ReservationSeat $row): array => [$row->seat->grid_row, $row->seat->grid_col])
-                ->values(),
+            // 座席表（P-31）・予約確認（P-37）と同じ並び順で示す（並べ替えは
+            // `Reservation::seatsInGridOrder()` が持つ。4.3.8「条件の集約」）。
+            'seats' => $reservation->seatsInGridOrder(),
             // 予約フローのURLは `{slug}` を持たず `ResolveCinema` を通らない。ヘッダー・
             // パンくずの館が前回選択したものにならないよう、予約から定まる館を現在の館
             // として確定させる（`ReservationStepController` と同じ理由。4.3.9）。

@@ -15,3 +15,4 @@ allowed-tools: Read, Grep, Glob
 - ログイン・会員登録の完了時は `SeatLockService::transfer()` で座席ロックの `holder_key` を引き継ぐ（13.4.6）
 - キャンセル時は無料鑑賞券を戻し、`released_at` を設定して座席を再販可能にする
 - `released_at` は親の `status` 変更と同一トランザクションで更新する
+- キャンセルの画面側は `App\Livewire\Front\Concerns\CancelsReservation` を use する。画面が与えるのは到達の根拠（`cancellableReservation()` / `cancellableReservationId()`）だけで、確認の持ち回り・導線の出し分け・結果の文言はトレイトが持つ（4.3.18 / 4.5.4）
