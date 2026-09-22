@@ -57,6 +57,10 @@
                 @endif
             </p>
             <p class="mt-1 text-xs text-stone-600">{{ __('front.mypage.stamp.note', ['total' => $stampsPerTicket]) }}</p>
+            {{-- 4.5.1-4。無料鑑賞券を使った予約は付与の対象外であることを、券を使う前に
+                 知れる場所に出す（4.5.5）。券の選択UI（12章 残課題31）を実装する際は
+                 P-35 にも同じ断りを置くこと。 --}}
+            <p class="mt-1 text-xs text-stone-600">{{ __('front.mypage.stamp.free_ticket_note') }}</p>
         </section>
 
         {{-- 7.14 構成要素1 無料鑑賞券 --}}

@@ -101,6 +101,8 @@ it('スタンプ数と無料鑑賞券を表示する（7.14 構成要素1 / 4.5.
         ->assertSee(__('front.mypage.stamp.count', ['count' => 1]))
         // 4.5.1-2。5個で1枚のため、残り4個。
         ->assertSee(__('front.mypage.stamp.progress', ['remaining' => 4]))
+        // 4.5.1-4 / 4.5.5。券を使った予約にはスタンプが付かないことを、使う前に知らせる。
+        ->assertSee(__('front.mypage.stamp.free_ticket_note'))
         ->assertSee(__('front.mypage.free_ticket.count', ['count' => 1]))
         ->assertSee($ticket->code)
         // 12章 残課題31。使い道を約束しない。
