@@ -2,6 +2,7 @@
 
 use App\Enums\AdminRole;
 use App\Enums\ContactType;
+use App\Enums\PostStatus;
 use App\Enums\ReservationStatus;
 use App\Enums\SeatDisplayClass;
 use App\Models\Admin;
@@ -10,6 +11,8 @@ use App\Models\Cinema;
 use App\Models\Format;
 use App\Models\FreeTicket;
 use App\Models\Movie;
+use App\Models\Post;
+use App\Models\PostCategory;
 use App\Models\Reservation;
 use App\Models\ReservationSeat;
 use App\Models\Screening;
@@ -27,6 +30,7 @@ use App\Services\StripeService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -183,6 +187,53 @@ function createAdmin(AdminRole $role = AdminRole::SuperAdmin, ?Cinema $cinema = 
         'cinema_id' => $cinema?->id,
         'is_active' => true,
     ]);
+}
+
+/**
+ * テスト用のお知らせカテゴリーを1件作成する（`m_post_categories.slug` は一意）。
+ */
+function createPostCategory(string $slug = 'notice', string $name = 'お知らせ'): PostCategory
+{
+    return PostCategory::firstOrCreate(['slug' => $slug], ['name' => $name]);
+}
+
+/**
+ * テスト用のお知らせを1件作成する。`$overrides` で一部の項目だけ差し替えられる。
+ *
+ * `created_by_admin_id` は設定しない（`#[Fillable]` に含まれないため。必要な
+ * テストは呼び出し側で直接代入すること）。
+ *
+ * @param  array<string, mixed>  $overrides
+ */
+function createPost(array $overrides = []): Post
+{
+    return Post::create(array_merge([
+        'category_id' => createPostCategory()->id,
+        'cinema_id' => null,
+        'title' => 'テストのお知らせ',
+        'body' => "## 見出し\n\n本文",
+        'status' => PostStatus::Published,
+        'published_at' => Date::now()->subDay(),
+    ], $overrides));
+}
+
+/**
+ * A-12（お知らせ）のLivewireフォームに投入する、バリデーションを通過する
+ * 入力値一式を返す。`$overrides` で一部の項目だけ差し替えて検証できる。
+ *
+ * @param  array<string, string>  $overrides
+ * @return array<string, string>
+ */
+function validPostForm(array $overrides = []): array
+{
+    return array_merge([
+        'category_id' => (string) createPostCategory()->id,
+        'cinema_id' => '',
+        'title' => 'テストのお知らせ',
+        'body' => "## 見出し\n\n本文",
+        'status' => PostStatus::Published->value,
+        'published_at' => Date::now()->subDay()->format('Y-m-d\TH:i'),
+    ], $overrides);
 }
 
 /**
