@@ -92,7 +92,7 @@ class Index extends Component
         Gate::forUser($admin)->authorize('update', $screening);
 
         if ($screening->reservations()->active()->exists()) {
-            // 有効な予約（`pending` / `paid`）が存在する上映回は編集できない
+            // 有効な予約（`paid` と期限内の `pending`。4.3.19）が存在する上映回は編集できない
             // （4.8.6追記表 / 6.2 制約1）。一覧のボタンも出さないが、
             // `/livewire/update` への直接呼び出しに備えてここでも拒む。
             Flux::toast(text: __('admin.screening.errors.locked_by_active_reservations'), variant: 'danger');
@@ -505,7 +505,7 @@ class Index extends Component
             ))
             ->with(['booking.cinema', 'booking.movie', 'booking.format', 'theater'])
             // 件数と操作可否で数える対象が異なる（6.2 制約1 / 12章 旧残課題33）。
-            // 編集の可否と一覧の件数は有効な予約（`pending` / `paid`）、削除の可否は
+            // 編集の可否と一覧の件数は有効な予約（`paid` と期限内の `pending`。4.3.19）、削除の可否は
             // 状態を問わない全件（`t_reservations.screening_id` が `restrictOnDelete`
             // であり、終端の予約が残る限りDBが削除を拒む）。
             ->withCount([

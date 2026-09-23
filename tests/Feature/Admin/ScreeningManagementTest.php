@@ -522,6 +522,49 @@ it('決済中（pending）の予約が存在する上映回は編集できない
         ->assertSet('showForm', false);
 });
 
+it('期限内の決済中の予約は編集を妨げる（4.3.19 / 6.2 制約1）', function () {
+    $fixture = makeScreeningFixture();
+
+    $screening = Screening::create([
+        'booking_id' => $fixture['booking']->id,
+        'theater_id' => $fixture['theater']->id,
+        'starts_at' => now()->addDay()->setTime(10, 0),
+        'ends_at' => now()->addDay()->setTime(12, 0),
+    ]);
+
+    // `expires_at` が未来＝まだ座席を押さえている（`Reservation::active()`）。
+    makeReservationFor($screening, ReservationStatus::Pending)
+        ->forceFill(['expires_at' => now()->addMinutes(10)])
+        ->save();
+
+    Livewire::actingAs(createAdmin(), 'admin')
+        ->test(Index::class)
+        ->call('editScreening', $screening->id)
+        ->assertSet('showForm', false);
+});
+
+it('ロックの期限を過ぎた決済中の予約は編集を妨げない（4.3.19 / 12章 旧残課題35）', function () {
+    $fixture = makeScreeningFixture();
+
+    $screening = Screening::create([
+        'booking_id' => $fixture['booking']->id,
+        'theater_id' => $fixture['theater']->id,
+        'starts_at' => now()->addDay()->setTime(10, 0),
+        'ends_at' => now()->addDay()->setTime(12, 0),
+    ]);
+
+    // 期限を過ぎた `pending` は座席を押さえていない（ロックが切れている）。B-02 が
+    // `expired` へ倒すのを待たずに編集できる（`Reservation::active()`）。
+    makeReservationFor($screening, ReservationStatus::Pending)
+        ->forceFill(['expires_at' => now()->subMinute()])
+        ->save();
+
+    Livewire::actingAs(createAdmin(), 'admin')
+        ->test(Index::class)
+        ->call('editScreening', $screening->id)
+        ->assertSet('showForm', true);
+});
+
 it('期限切れ・キャンセル済みの予約だけが残る上映回は編集できる（12章 旧残課題33）', function (ReservationStatus $status) {
     $fixture = makeScreeningFixture();
 

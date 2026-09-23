@@ -21,6 +21,15 @@ final readonly class CardCharge
     /** 追加認証（3Dセキュア等）が必要な状態。 */
     public const string STATUS_REQUIRES_ACTION = 'requires_action';
 
+    /**
+     * 取り消し済みの状態。**課金は成立していない。**
+     *
+     * B-02（10章）が再度 `cancel` を投げないために要る。取り消し済みの PaymentIntent へ
+     * `cancel` を送ると Stripe はエラーを返すため、**取り消せなかったものと区別できずに
+     * 恒久的に `pending` が残る**（4.3.19）。
+     */
+    public const string STATUS_CANCELED = 'canceled';
+
     private function __construct(
         public string $paymentIntentId,
         public string $status,

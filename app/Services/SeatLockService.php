@@ -42,6 +42,16 @@ class SeatLockService
     public const int MAX_SEATS_PER_HOLDER = 8;
 
     /**
+     * B-01 が1回の実行で削除するロックの上限（10章）。
+     *
+     * 期限切れのロックは**読み取りの側では既に無視されている**（`SeatLock::active()`）
+     * ため、消し切れなかった分が次回へ回っても販売には影響しない。1回の `DELETE` が
+     * 大量の行に及んでロックを長く保持することを避ける（4.3.8 が守った直列化の相手は
+     * 顧客の座席取得であり、掃除のために待たせない）。
+     */
+    public const int RELEASE_PER_RUN_LIMIT = 1000;
+
+    /**
      * 現在の利用者の保持者キー（13.3）。会員は `user:{id}`、非会員は `session:{id}`。
      *
      * 形式の組み立てを画面側に書かせないため本サービスが持つ（13.4.6 の趣旨。4.3.9）。
@@ -196,6 +206,29 @@ class SeatLockService
         SeatLock::where('screening_id', $screening->id)
             ->whereIn('seat_id', $seatIds)
             ->where('holder_key', $holderKey)
+            ->delete();
+    }
+
+    /**
+     * 期限切れのロックを削除する（B-01、10章）。
+     *
+     * **判定は `SeatLock::active()` の裏返しである。** 期限の条件を掃除の側に書き直すと、
+     * 「読み取りは無視しているのに消されない（またはその逆）」という食い違いを許す
+     * （4.3.8「条件の集約」）。
+     *
+     * **行ロックを取らない。** 消すのは既にどの読み取りからも無視されている行である。
+     * `acquire()` が `lockForUpdate()` で先に掴んだ行に対しては、待たされた `DELETE` が
+     * 待ちの解けた時点で **WHERE を最新のコミット値で再評価する**ため、期限を引き直した
+     * 行は削除されない（InnoDB の挙動。4.3.19）。`extend()` / `transfer()` とは条件が
+     * 互いに素であり、他の行を保持したまま待たないのでデッドロックの環も作らない。
+     *
+     * @return int 削除した件数
+     */
+    public function releaseExpired(int $limit = self::RELEASE_PER_RUN_LIMIT, ?CarbonImmutable $now = null): int
+    {
+        return SeatLock::query()
+            ->where('expires_at', '<=', $now ?? Date::now())
+            ->limit($limit)
             ->delete();
     }
 

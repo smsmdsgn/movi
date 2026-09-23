@@ -9,6 +9,7 @@ use App\Models\Screening;
 use App\Models\Seat;
 use App\Models\SeatLock;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -65,6 +66,15 @@ class ReservationService
      */
     private const int TRANSACTION_ATTEMPTS = 3;
 
+    /**
+     * B-02 が1回の実行で無効化する予約の上限（10章）。
+     *
+     * **1件ごとに Stripe へ問い合わせる可能性がある**（課金が残っていないことを確かめる
+     * ため。4.3.19）。B-03 の上限（1000件）より小さくするのは、外部との通信が1件ずつ
+     * 直列に入るためである。取りこぼした分は次回の実行が拾う。
+     */
+    public const int EXPIRE_PER_RUN_LIMIT = 100;
+
     public function __construct(
         private readonly StripeService $stripe,
         private readonly SeatLockService $locks,
@@ -110,8 +120,19 @@ class ReservationService
             return PaymentAttempt::failed('front.reservation.errors.lock_expired');
         }
 
-        $reservation = $this->reusable($pending, $screening, $amount)
-            ?? $this->createPending($screening, $breakdown, $purchaser, $expiresAt);
+        $reservation = $this->reusable($pending, $screening, $amount);
+
+        if ($reservation !== null) {
+            // **使い回す予約の期限を現在のロックに合わせて引き直す。** ロックは P-36 への
+            // 再入場（`extend()`）や座席の取り直しで延びる一方、`expires_at` は作成時の
+            // 値のままである。古い期限を残すと、**座席を押さえているのに期限切れに見え**、
+            // `Reservation::active()` が有効と認めず B-02 が倒しにかかる（4.3.19）。
+            // 保存の失敗は無視する（次の確定で引き直す。倒されても課金の前である）。
+            $reservation->expires_at = $expiresAt;
+            $this->persist($reservation);
+        } else {
+            $reservation = $this->createPending($screening, $breakdown, $purchaser, $expiresAt);
+        }
 
         if ($amount === 0) {
             return $this->finalizeOrRefund($reservation, $screening, $breakdown, $holderKey, charged: false);
@@ -322,6 +343,175 @@ class ReservationService
 
             return $current;
         }, self::TRANSACTION_ATTEMPTS);
+    }
+
+    /**
+     * 期限切れの `pending` を `expired` にする（B-02、10章 / 4.3.19）。
+     *
+     * **`pending` は `t_reservation_seats` を持たない**（座席は確定時に作る。6.4.2）
+     * ため、解放すべき座席は無い。座席ロックは B-01 が消す。ここで行うのは状態の
+     * 整理だけである。
+     *
+     * **課金が残っていないことを確かめてから倒す。** 10章が「`stripe_payment_intent_id`
+     * を持ち `refunded_at` が未設定の予約は対象外」としていたのは、その行が**課金が
+     * 残っていることを示す唯一の手がかり**だからである（4.3.15）。ただし一律に除外すると、
+     * 3Dセキュアを中断しただけの予約（課金は成立していない）が恒久的に残り、A-09 が
+     * その上映回を編集できなくなる（旧12章 残課題35）。そこで**除外する代わりに
+     * Stripe へ問い合わせ**、取り消せたものは手がかりごと消してから倒す。
+     *
+     * @param  int  $limit  1回の実行で処理する上限
+     * @return PendingExpiry 無効化した件数と、課金が残っていて見送った件数
+     */
+    public function expirePending(int $limit = self::EXPIRE_PER_RUN_LIMIT): PendingExpiry
+    {
+        $expired = 0;
+        $withCharge = 0;
+        $failed = 0;
+
+        foreach ($this->expirable($limit) as $candidate) {
+            try {
+                $chargedId = $candidate->stripe_payment_intent_id;
+
+                // **Stripe への問い合わせはトランザクションの外で行う**（8.2 / 4.3.18）。
+                if (! $this->hasNoRemainingCharge($candidate)) {
+                    $withCharge++;
+
+                    continue;
+                }
+
+                // 取り消せた場合のみ、そのIDを外す対象として渡す（`hasNoRemainingCharge()`
+                // が候補のIDを null にした場合に限る）。返金済み・IDが無い場合は触らない。
+                $cancelledId = $candidate->stripe_payment_intent_id === null ? $chargedId : null;
+
+                if ($this->expireOne($candidate, $cancelledId)) {
+                    $expired++;
+                }
+            } catch (Throwable $exception) {
+                // 1件の失敗で残りを止めない。次回の実行が拾い直す。**例外のクラス名だけを
+                // 残す**（メッセージにはバインド値が載る。17.4.3 / 4.3.15）。
+                $failed++;
+
+                Log::warning('Pending reservation could not be expired.', [
+                    'exception' => $exception::class,
+                    'reservation_id' => $candidate->id,
+                ]);
+            }
+        }
+
+        return new PendingExpiry($expired, $withCharge, $failed);
+    }
+
+    /**
+     * 1件を `expired` へ倒す（4.3.19）。倒した場合のみ true を返す。
+     *
+     * **予約行を `lockForUpdate()` で読み直し、条件を再判定してから書く。**
+     * `expirable()` が先読みしてから Stripe の応答を待つ間に、その予約が確定
+     * （`paid`）しうる。主キー指定の無条件な更新で書き戻すと、**確定を `expired` で
+     * 上書きする**（座席は `t_reservation_seats` に残るのに、利用者の画面から予約が
+     * 消え、キャンセル＝返金の導線も断たれる）。`finalize()` が同じ理由で予約を
+     * 読み直しているのと同型である。
+     *
+     * **再判定の主眼は `status` である。** 予約の `expires_at` は使い回しの際に現在の
+     * ロックへ引き直すため（`payAndConfirm()`）、読み直しても通常は同じ値を読む。
+     * それでも条件に含めるのは、引き直しの保存に失敗した予約を倒さないためである。
+     *
+     * @param  string|null  $cancelledId  取り消せた PaymentIntent のID（外す対象）
+     */
+    private function expireOne(Reservation $candidate, ?string $cancelledId): bool
+    {
+        return DB::transaction(function () use ($candidate, $cancelledId): bool {
+            $reservation = Reservation::query()->whereKey($candidate->id)->lockForUpdate()->first();
+
+            if ($reservation === null || $reservation->status !== ReservationStatus::Pending) {
+                return false;
+            }
+
+            if ($reservation->expires_at === null || $reservation->expires_at->greaterThan(Date::now())) {
+                return false;
+            }
+
+            $reservation->status = ReservationStatus::Expired;
+            // 終端に達した予約は期限を持たない（`paid` と同じ扱い）。
+            $reservation->expires_at = null;
+
+            // **取り消したIDと一致する場合だけ外す。** 先読みの後に利用者が再課金して
+            // 新しい PaymentIntent を保存していることがあり、それを消すと**課金の
+            // 手がかりを失う**（取り消したのは古いIDである。17.3-5）。
+            if ($cancelledId !== null && $reservation->stripe_payment_intent_id === $cancelledId) {
+                $reservation->stripe_payment_intent_id = null;
+            }
+
+            $reservation->save();
+
+            return true;
+        }, self::TRANSACTION_ATTEMPTS);
+    }
+
+    /**
+     * 無効化の対象となる予約（4.3.19）。
+     *
+     * `expires_at` は保持していたロックのうち最も早い期限に合わせてある
+     * （`createPending()`）。その時点で座席は他の顧客へ渡るため、予約も無効化される。
+     *
+     * @return Collection<int, Reservation>
+     */
+    private function expirable(int $limit): Collection
+    {
+        return Reservation::query()
+            ->where('status', ReservationStatus::Pending)
+            ->whereNotNull('expires_at')
+            ->where('expires_at', '<=', Date::now())
+            // 古いものから片付ける（`expires_at` は作成順に並ぶとは限らない）。
+            ->orderBy('expires_at')
+            ->limit($limit)
+            ->get();
+    }
+
+    /**
+     * この予約に課金が残っていないと確かめられるか（4.3.19）。
+     *
+     * | 状態 | 判定 |
+     * |---|---|
+     * | PaymentIntent のIDが無い | 残っていない（課金の要求を出していない、または応答を得られなかった。10章） |
+     * | 返金済み（`refunded_at`） | 残っていない |
+     * | Stripe 上で成立している（`succeeded`） | **残っている。** 倒さず手がかりとして残す（17.3-5 / 12章 残課題39） |
+     * | 取り消し済み（`canceled`） | 残っていない。**再度 `cancel` を投げない**（下記） |
+     * | 未確定で、取り消せた | 残っていない。**IDを外してから倒す**（手がかりに偽物を残さない） |
+     * | 未確定だが取り消せない・問い合わせに失敗 | 判断しない。次回の実行に送る |
+     *
+     * **取り消し済みを先に見るのは、前回の実行が取り消しに成功した直後に保存へ失敗した
+     * 場合に詰まらないようにするため。** その行は `pending` のままIDを持って残るが、
+     * Stripe 側は既に `canceled` であり、再度 `cancel` を送るとエラーが返る。取り消せ
+     * なかったものと区別できないと、**以後どの実行でも倒せない行になる**（4.3.19）。
+     */
+    private function hasNoRemainingCharge(Reservation $reservation): bool
+    {
+        $paymentIntentId = $reservation->stripe_payment_intent_id;
+
+        if ($paymentIntentId === null || $reservation->refunded_at !== null) {
+            return true;
+        }
+
+        try {
+            $charge = $this->stripe->retrievePayment($paymentIntentId);
+        } catch (StripeException) {
+            // 成否が不明。**倒さない。** 課金が残っている可能性を消さずに残す。
+            return false;
+        }
+
+        if ($charge->status === CardCharge::STATUS_SUCCEEDED) {
+            return false;
+        }
+
+        if ($charge->status !== CardCharge::STATUS_CANCELED && ! $this->stripe->cancelPayment($paymentIntentId)) {
+            return false;
+        }
+
+        // 取り消せた PaymentIntent のIDは外す（`undoCharge()` と同じ扱い）。課金は
+        // 残っておらず、残すと「課金が残っている予約」の目印が偽物になる。
+        $reservation->stripe_payment_intent_id = null;
+
+        return true;
     }
 
     /**

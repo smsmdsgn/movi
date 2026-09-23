@@ -51,7 +51,7 @@
         <flux:table.rows>
             @forelse ($screenings as $screening)
                 @php
-                    // 編集は有効な予約（`pending` / `paid`）が無ければ許す（6.2 制約1、12章 旧残課題33）。
+                    // 編集は有効な予約（`paid` と期限内の `pending`。4.3.19）が無ければ許す（6.2 制約1、12章 旧残課題33）。
                     $canUpdate = $screening->active_reservations_count === 0 && \Illuminate\Support\Facades\Gate::forUser($currentAdmin)->allows('update', $screening);
                     // 削除は開始前の回に限る（6.2「上映回は上映期間終了後も保持」、4.8.6追記表）。
                     // **状態を問わず予約行が1件でもあれば削除できない**（`restrictOnDelete`）。

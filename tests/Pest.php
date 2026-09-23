@@ -613,6 +613,14 @@ function fakeStripeService(CardCharge|StripeException $charge, CardCharge|Stripe
         /** 課金の最中に起きたこと（ロックの期限切れ等）を再現するための差し込み。 */
         public ?Closure $onCharge = null;
 
+        /**
+         * 問い合わせの最中に起きたこと（予約の確定等）を再現するための差し込み。
+         *
+         * B-02 は Stripe への問い合わせをトランザクションの外で行うため、その間に
+         * 対象の予約が確定しうる（4.3.19）。
+         */
+        public ?Closure $onRetrieve = null;
+
         /** @var list<array{amount: int, paymentMethodId: string, idempotencyKey: string}> */
         public array $charges = [];
 
@@ -640,6 +648,10 @@ function fakeStripeService(CardCharge|StripeException $charge, CardCharge|Stripe
         public function retrievePayment(string $paymentIntentId): CardCharge
         {
             $this->retrievals[] = $paymentIntentId;
+
+            if ($this->onRetrieve !== null) {
+                ($this->onRetrieve)();
+            }
 
             if ($this->retrieved instanceof StripeException) {
                 throw $this->retrieved;

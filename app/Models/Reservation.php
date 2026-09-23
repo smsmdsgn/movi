@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\Date;
 
 /**
  * @property int $id
@@ -70,18 +71,36 @@ class Reservation extends Model
      * 状態を問わずに判定すると、決済を中断した利用者が1人でもいた上映回を
      * A-09 が恒久的に編集できなくなる**（6.2 制約1 / 12章 旧残課題33。4.3.16）。
      *
-     * **`expires_at` は見ない。** 期限を過ぎた `pending` も、B-02（10章）が `expired`
-     * へ移すまでは含まれる（座席ロックは切れていても行の状態は `pending` のままである）。
-     * 12章 残課題35 の経路では恒久的に残りうる。B-02 の実装時に、本スコープを
-     * 「`pending` は期限内のものに限る」へ狭めるかを判断すること。
+     * **`pending` は期限内のものに限る**（工程6-d で狭めた。4.3.19）。`expires_at` は
+     * 保持していた座席ロックのうち最も早い期限に合わせてあり、それを過ぎた `pending` は
+     * **座席を押さえていない**（ロックが切れており、確定時の所有権の再検証も通らない）。
+     * B-02（10章）が `expired` へ倒すまでの間も座席を押さえているとみなすと、決済を
+     * 中断した利用者が1人いるだけで A-09 がその上映回を編集できない時間が生じる
+     * （B-02 が止まれば恒久的に。旧12章 残課題35）。
+     *
+     * **`expires_at` が null の `pending` は含める。** 確定済み（`paid`）は期限を持たない
+     * 一方、`pending` で null になるのは想定していない状態であり、除外すると座席を
+     * 押さえたまま A-09 の編集を許すことになる。
      *
      * @param  Builder<Reservation>  $query
      * @return Builder<Reservation>
      */
     #[Scope]
-    protected function active(Builder $query): Builder
+    protected function active(Builder $query, ?CarbonImmutable $now = null): Builder
     {
-        return $query->whereIn('status', [ReservationStatus::Pending, ReservationStatus::Paid]);
+        return $query->where(function (Builder $query) use ($now): void {
+            $query
+                ->where('status', ReservationStatus::Paid)
+                ->orWhere(function (Builder $query) use ($now): void {
+                    $query
+                        ->where('status', ReservationStatus::Pending)
+                        ->where(function (Builder $query) use ($now): void {
+                            $query
+                                ->whereNull('expires_at')
+                                ->orWhere('expires_at', '>', $now ?? Date::now());
+                        });
+                });
+        });
     }
 
     /**
