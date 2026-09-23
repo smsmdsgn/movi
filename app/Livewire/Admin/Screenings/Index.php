@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Admin\Screenings;
 
+use App\Livewire\Admin\Concerns\ParsesDateTimeInput;
 use App\Models\Admin;
 use App\Models\Booking;
 use App\Models\Cinema;
@@ -40,6 +41,7 @@ use Livewire\WithPagination;
  */
 class Index extends Component
 {
+    use ParsesDateTimeInput;
     use WithPagination;
 
     /** 一覧の絞り込み。`super-admin` のみ館を選べる（`cinema-admin` は自館固定）。 */
@@ -397,28 +399,6 @@ class Index extends Component
         $this->ends_at = $startsAt
             ->addMinutes($booking->movie->runtime_minutes + Screening::TRAILER_MINUTES)
             ->format('Y-m-d\TH:i');
-    }
-
-    /**
-     * `datetime-local` の入力値を解釈する。秒の有無はブラウザにより異なる。
-     */
-    private function parseDateTime(string $value): ?CarbonImmutable
-    {
-        foreach (['Y-m-d\TH:i', 'Y-m-d\TH:i:s'] as $format) {
-            try {
-                $parsed = CarbonImmutable::createFromFormat($format, $value);
-            } catch (\Throwable) {
-                continue;
-            }
-
-            // `createFromFormat` は `2026-09-31T10:00` のような日付を翌月へ繰り上げて
-            // 解釈するため、往復させて入力と一致することを確かめる。
-            if ($parsed->format($format) === $value) {
-                return $parsed->seconds(0);
-            }
-        }
-
-        return null;
     }
 
     /** 一覧が対象とする上映日。不正な値・空文字は本日として扱う（4.8.6追記表）。 */

@@ -330,3 +330,23 @@ it('掲載期間の境界は両端を含む（4.7.5追記表）', function () {
 
     expect($always->isVisibleAt($now))->toBeTrue();
 });
+
+it('掲載期間を入力して保存できる（日時の解釈が成功パスを通る）', function () {
+    // `validBannerForm()` は掲載期間を空で返すため、期間を入れた保存を通さないと
+    // `ParsesDateTimeInput`（A-09・A-12・A-13 が共有）がこの画面で一度も呼ばれない。
+    Livewire::actingAs(createAdmin(), 'admin')
+        ->test(Index::class)
+        ->call('createBanner')
+        ->set(validBannerForm([
+            'starts_at' => '2026-10-01T10:00',
+            'ends_at' => '2026-10-31T23:59',
+        ]))
+        ->set('image', UploadedFile::fake()->image('period.jpg', 970, 250))
+        ->call('save')
+        ->assertHasNoErrors();
+
+    $banner = Banner::sole();
+
+    expect($banner->starts_at->format('Y-m-d H:i:s'))->toBe('2026-10-01 10:00:00')
+        ->and($banner->ends_at->format('Y-m-d H:i:s'))->toBe('2026-10-31 23:59:00');
+});

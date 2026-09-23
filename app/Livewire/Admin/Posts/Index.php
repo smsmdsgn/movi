@@ -3,11 +3,11 @@
 namespace App\Livewire\Admin\Posts;
 
 use App\Enums\PostStatus;
+use App\Livewire\Admin\Concerns\ParsesDateTimeInput;
 use App\Models\Admin;
 use App\Models\Cinema;
 use App\Models\Post;
 use App\Models\PostCategory;
-use Carbon\CarbonImmutable;
 use Flux\Flux;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
@@ -38,6 +38,7 @@ use Livewire\WithPagination;
  */
 class Index extends Component
 {
+    use ParsesDateTimeInput;
     use WithPagination;
 
     /** 一覧の絞り込み。全館を見られる場合のみ選べる（`cinema-admin` は自館固定）。 */
@@ -211,27 +212,6 @@ class Index extends Component
         }
 
         return $post;
-    }
-
-    /**
-     * `datetime-local` の入力値を解釈する。秒の有無はブラウザにより異なる
-     * （A-09 と同じ実装）。
-     */
-    private function parseDateTime(string $value): ?CarbonImmutable
-    {
-        foreach (['Y-m-d\TH:i', 'Y-m-d\TH:i:s'] as $format) {
-            try {
-                $parsed = CarbonImmutable::createFromFormat($format, $value);
-            } catch (\Throwable) {
-                continue;
-            }
-
-            if ($parsed->format($format) === $value) {
-                return $parsed->seconds(0);
-            }
-        }
-
-        return null;
     }
 
     private function resetForm(): void

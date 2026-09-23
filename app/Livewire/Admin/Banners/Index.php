@@ -3,10 +3,10 @@
 namespace App\Livewire\Admin\Banners;
 
 use App\Enums\BannerPosition;
+use App\Livewire\Admin\Concerns\ParsesDateTimeInput;
 use App\Models\Admin;
 use App\Models\Banner;
 use App\Models\Cinema;
-use Carbon\CarbonImmutable;
 use Flux\Flux;
 use Illuminate\Contracts\View\View;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -41,6 +41,7 @@ use Livewire\WithPagination;
  */
 class Index extends Component
 {
+    use ParsesDateTimeInput;
     use WithFileUploads;
     use WithPagination;
 
@@ -223,27 +224,6 @@ class Index extends Component
         }
 
         return $banner;
-    }
-
-    /**
-     * `datetime-local` の入力値を解釈する。秒の有無はブラウザにより異なる
-     * （A-09・A-12 と同じ実装）。
-     */
-    private function parseDateTime(string $value): ?CarbonImmutable
-    {
-        foreach (['Y-m-d\TH:i', 'Y-m-d\TH:i:s'] as $format) {
-            try {
-                $parsed = CarbonImmutable::createFromFormat($format, $value);
-            } catch (\Throwable) {
-                continue;
-            }
-
-            if ($parsed->format($format) === $value) {
-                return $parsed->seconds(0);
-            }
-        }
-
-        return null;
     }
 
     private function resetForm(): void
