@@ -1,11 +1,13 @@
 <?php
 
 use App\Enums\AdminRole;
+use App\Enums\BannerPosition;
 use App\Enums\ContactType;
 use App\Enums\PostStatus;
 use App\Enums\ReservationStatus;
 use App\Enums\SeatDisplayClass;
 use App\Models\Admin;
+use App\Models\Banner;
 use App\Models\Booking;
 use App\Models\Cinema;
 use App\Models\Format;
@@ -233,6 +235,48 @@ function validPostForm(array $overrides = []): array
         'body' => "## 見出し\n\n本文",
         'status' => PostStatus::Published->value,
         'published_at' => Date::now()->subDay()->format('Y-m-d\TH:i'),
+    ], $overrides);
+}
+
+/**
+ * テスト用のバナーを1件作成する。`$overrides` で一部の項目だけ差し替えられる。
+ * `image_path` は既定でダミーのパス（`BannerSeeder` と同様、実在しない）。
+ *
+ * @param  array<string, mixed>  $overrides
+ */
+function createBanner(array $overrides = []): Banner
+{
+    return Banner::create(array_merge([
+        'position' => BannerPosition::Main,
+        'image_path' => 'banners/dummy.jpg',
+        'link_url' => null,
+        'alt' => 'テストのバナー',
+        'sort_order' => 1,
+        'starts_at' => null,
+        'ends_at' => null,
+        'cinema_id' => null,
+    ], $overrides));
+}
+
+/**
+ * A-13（バナー）のLivewireフォームに投入する、バリデーションを通過する入力値一式を
+ * 返す。`$overrides` で一部の項目だけ差し替えて検証できる。**画像（`image`）は
+ * 含まない**（`UploadedFile::fake()` はテスト側で用意し、`->set('image', ...)` で
+ * 別途渡すこと）。
+ *
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function validBannerForm(array $overrides = []): array
+{
+    return array_merge([
+        'position' => BannerPosition::Main->value,
+        'link_url' => '',
+        'alt' => 'テストのバナー',
+        'sort_order' => '1',
+        'starts_at' => '',
+        'ends_at' => '',
+        'cinema_id' => '',
     ], $overrides);
 }
 

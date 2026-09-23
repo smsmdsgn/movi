@@ -2,24 +2,24 @@
 
 use App\Enums\AdminRole;
 
-it('未実装画面（4.8.5 A-13 / A-16）のルートが認証済み管理者に画面IDを返す', function (string $routeName, string $screenId) {
+it('未実装画面（4.8.5 A-16）のルートが認証済み管理者に画面IDを返す', function (string $routeName, string $screenId) {
     $this->actingAs(createAdmin(), 'admin')
         ->get(route($routeName))
         ->assertOk()
         ->assertSee($screenId);
 })->with([
-    'A-13 バナー' => ['admin.banner.index', 'A-13'],
     'A-16 入場ゲート' => ['admin.gate.index', 'A-16'],
 ]);
 
-it('cinema-admin はバナー・管理者アカウント管理を除く全画面へ到達できる（4.8.2）', function (string $routeName, string $screenId) {
+it('cinema-admin は入場ゲート（A-16）へ到達できる（4.8.2）', function () {
+    // 4.8.2 は「バナー・管理者アカウント管理を除く全画面」を `cinema-admin` に許すが、
+    // 実装済みの画面はそれぞれのテストが到達を固定している（A-12 は PostManagementTest、
+    // A-13 は到達不可のため BannerManagementTest）。ここに残るのは未実装の A-16 のみ。
     $this->actingAs(createAdmin(AdminRole::CinemaAdmin, createCinema()), 'admin')
-        ->get(route($routeName))
+        ->get(route('admin.gate.index'))
         ->assertOk()
-        ->assertSee($screenId);
-})->with([
-    'A-16 入場ゲート' => ['admin.gate.index', 'A-16'],
-]);
+        ->assertSee('A-16');
+});
 
 it('管理画面ダッシュボード（A-02）が認証済み管理者に表示される', function () {
     $admin = createAdmin();
@@ -50,6 +50,7 @@ it('未ログインで管理画面配下にアクセスすると admin.login へ
     'A-10 予約状況' => ['admin.reservation.index'],
     'A-11 予約検索' => ['admin.reservation.search'],
     'A-12 お知らせ' => ['admin.post.index'],
+    'A-13 バナー' => ['admin.banner.index'],
     'A-14 管理者アカウント' => ['admin.account.index'],
     'A-15 パスワード変更' => ['admin.password.edit'],
 ]);

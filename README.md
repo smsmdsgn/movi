@@ -591,10 +591,14 @@ composer install
 npm install
 cp .env.example .env
 php artisan key:generate
+php artisan storage:link
 # .env を編集し、キーを設定する
 docker compose up -d
 php artisan migrate --seed
 ```
+
+`storage:link` はバナー画像（A-13）の表示に必要。`public/storage` はリポジトリに
+含まれないため、環境ごとに作成する。
 
 | 項目 | 備考 |
 |---|---|
@@ -618,6 +622,7 @@ npm run build
 
 # サーバー側
 php artisan migrate --force
+php artisan storage:link
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
