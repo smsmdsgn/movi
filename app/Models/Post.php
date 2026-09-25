@@ -60,6 +60,22 @@ class Post extends Model
     }
 
     /**
+     * 顧客側に掲載する記事に絞る（4.7.1 の公開制御）。`status` が `published` かつ
+     * `published_at` が現在以前のもの。`published_at` が NULL の行も除外する（4.7.4追記表）。
+     *
+     * @param  Builder<Post>  $query
+     * @return Builder<Post>
+     */
+    #[Scope]
+    protected function published(Builder $query): Builder
+    {
+        return $query
+            ->where($this->qualifyColumn('status'), PostStatus::Published)
+            ->whereNotNull($this->qualifyColumn('published_at'))
+            ->where($this->qualifyColumn('published_at'), '<=', now());
+    }
+
+    /**
      * @return BelongsTo<PostCategory, $this>
      */
     public function category(): BelongsTo

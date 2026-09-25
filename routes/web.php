@@ -10,6 +10,8 @@ use App\Http\Controllers\Front\LookupController;
 use App\Http\Controllers\Front\MovieController;
 use App\Http\Controllers\Front\MyPageController;
 use App\Http\Controllers\Front\MyPageReservationController;
+use App\Http\Controllers\Front\NewsController;
+use App\Http\Controllers\Front\NewsDetailController;
 use App\Http\Controllers\Front\PagePlaceholderController;
 use App\Http\Controllers\Front\PaymentController;
 use App\Http\Controllers\Front\PlaceholderController;
@@ -109,9 +111,9 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
     |--------------------------------------------------------------------------
     |
     | {slug} は ResolveCinema が館へ解決してコンテナへバインドする（13.4.1）。
-    | P-21〜P-23 は工程4で実装済み。P-24〜P-28 は該当工程（11.1）で実装するため、
-    | 現時点は PlaceholderController が画面IDと館名のみを返す。画面IDは defaults() で
-    | コントローラへ渡す。
+    | P-21〜P-23 は工程4で、P-24〜P-26（お知らせ）は工程7-cで実装済み。P-27・P-28 は
+    | 該当工程（11.1）で実装するため、現時点は PlaceholderController が画面IDと館名の
+    | みを返す。画面IDは defaults() でコントローラへ渡す。
     |
     | ルートのアクションにクロージャを使用しないこと。route:cache（15.3.2）は
     | クロージャを直列化する際に外側の候補を選び、エラーを出さないまま
@@ -126,9 +128,9 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
             Route::get('/', CinemaTopController::class)->name('cinema.show');
             Route::get('schedule', ScheduleController::class)->name('schedule.index');
             Route::get('movies/{id}', MovieController::class)->name('movie.show')->whereNumber('id');
-            Route::get('news', PlaceholderController::class)->defaults('screenId', 'P-24')->name('news.index');
-            Route::get('news/detail/{id}', PlaceholderController::class)->defaults('screenId', 'P-26')->name('news.show')->whereNumber('id');
-            Route::get('news/{category}', PlaceholderController::class)->defaults('screenId', 'P-25')->name('news.category');
+            Route::get('news', NewsController::class)->name('news.index');
+            Route::get('news/detail/{id}', NewsDetailController::class)->name('news.show')->whereNumber('id');
+            Route::get('news/{category}', NewsController::class)->name('news.category');
             Route::get('establishment', PlaceholderController::class)->defaults('screenId', 'P-27')->name('establishment.index');
             Route::get('access', PlaceholderController::class)->defaults('screenId', 'P-28')->name('access.index');
         });

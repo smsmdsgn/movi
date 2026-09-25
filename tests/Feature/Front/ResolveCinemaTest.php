@@ -40,9 +40,6 @@ it('館別ページで {slug} の館を解決し、画面IDに対応するペー
         ->assertSee('data-testid="cinema-name">祇園ムビ<', false)
         ->assertSee($screenId);
 })->with([
-    'P-24 お知らせ一覧' => ['front.news.index', 'P-24', []],
-    'P-25 お知らせカテゴリー別' => ['front.news.category', 'P-25', ['category' => 'campaign']],
-    'P-26 お知らせ詳細' => ['front.news.show', 'P-26', ['id' => 1]],
     'P-27 施設案内' => ['front.establishment.index', 'P-27', []],
     'P-28 アクセス' => ['front.access.index', 'P-28', []],
 ]);
@@ -86,6 +83,35 @@ it('P-23 作品詳細が解決された館名を表示する', function () {
     $this->get(route('front.movie.show', ['slug' => 'gion', 'id' => $movie->id]))
         ->assertOk()
         ->assertSee('data-testid="cinema-name">祇園ムビ<', false);
+});
+
+it('P-24 お知らせ一覧が解決された館名を表示する', function () {
+    createCinema('gion', '祇園ムビ');
+
+    $this->get(route('front.news.index', ['slug' => 'gion']))
+        ->assertOk()
+        ->assertSee('data-testid="cinema-name">祇園ムビ<', false)
+        ->assertDontSee('P-24');
+});
+
+it('P-25 お知らせカテゴリー別が解決された館名を表示する', function () {
+    createCinema('gion', '祇園ムビ');
+    createPostCategory('campaign', 'キャンペーン');
+
+    $this->get(route('front.news.category', ['slug' => 'gion', 'category' => 'campaign']))
+        ->assertOk()
+        ->assertSee('data-testid="cinema-name">祇園ムビ<', false)
+        ->assertDontSee('P-25');
+});
+
+it('P-26 お知らせ詳細が解決された館名を表示する', function () {
+    createCinema('gion', '祇園ムビ');
+    $post = createPost();
+
+    $this->get(route('front.news.show', ['slug' => 'gion', 'id' => $post->id]))
+        ->assertOk()
+        ->assertSee('data-testid="cinema-name">祇園ムビ<', false)
+        ->assertDontSee('P-26');
 });
 
 it('存在しない slug では404を返す', function () {

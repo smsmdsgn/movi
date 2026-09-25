@@ -17,7 +17,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['slug', 'name'])]
 class PostCategory extends Model
 {
+    /** 「重要なお知らせ」の slug（4.7.1）。顧客側で強調して表示する（7.3-6）。 */
+    public const SLUG_IMPORTANT = 'important';
+
     protected $table = 'm_post_categories';
+
+    public function isImportant(): bool
+    {
+        return $this->slug === self::SLUG_IMPORTANT;
+    }
 
     /**
      * @return HasMany<Post, $this>

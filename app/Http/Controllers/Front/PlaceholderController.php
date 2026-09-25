@@ -10,8 +10,8 @@ use LogicException;
 
 /**
  * 工程2（館切替とルーティング）の検証用に、館の解決結果のみを返す暫定コントローラ。
- * 館別ページの実装（工程4以降）で画面ごとの Livewire コンポーネントへ差し替え、
- * 本クラスと `front/placeholder.blade.php` は削除する。
+ * 使用箇所は P-27・P-28 のみ（P-21〜P-23 は工程4、P-24〜P-26 は工程7-cで差し替え済み）。
+ * 残る画面を差し替えた時点で、本クラスと `front/placeholder.blade.php` は削除する（12章 残課題8）。
  */
 class PlaceholderController extends Controller
 {

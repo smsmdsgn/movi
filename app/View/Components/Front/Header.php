@@ -4,6 +4,7 @@ namespace App\View\Components\Front;
 
 use App\Models\Booking;
 use App\Models\Cinema;
+use App\Models\Post;
 use App\Services\CurrentCinemaService;
 use Closure;
 use Illuminate\Contracts\View\View;
@@ -26,43 +27,58 @@ class Header extends Component
     {
         $this->currentCinema = $resolver->resolve($request);
 
-        $movieCinemaIds = $this->movieCinemaIds($request);
+        $detailCinemaIds = $this->detailCinemaIds($request);
 
         $this->switchOptions = Cinema::orderBy('id')->get()
             ->map(fn (Cinema $cinema) => [
                 'cinema' => $cinema,
-                'url' => $this->switchUrl($request, $cinema, $movieCinemaIds),
+                'url' => $this->switchUrl($request, $cinema, $detailCinemaIds),
             ])
             ->all();
     }
 
     /**
-     * 作品詳細（P-23）では、表示中の作品に上映編成を持つ館のIDを1クエリで求めておく。
-     * 持たない館へ切り替えた場合は同種のページが存在しない（`MovieController` が404を返す）ため、
-     * 館トップへ落とす（4.1.3追記表「P-23 の館切替」）。P-23 以外では `null`。
+     * 詳細ページ（P-23・P-26）では、表示中の作品・記事を切替先でも表示できる館のIDを
+     * 1クエリで求めておく。表示できない館へ切り替えた場合は同種のページが404になるため、
+     * 館トップへ落とす（4.1.3追記表「P-23・P-26 の館切替」）。制限が無い場合は `null`。
+     *
+     * - P-23: 作品に上映編成を持つ館（`MovieController` が404を返す条件と同じ）
+     * - P-26: 全館共通の記事は制限なし、特定館の記事はその館のみ
+     *   （`NewsDetailController` が404を返す条件と同じ）
      *
      * @return array<int, int>|null
      */
-    private function movieCinemaIds(Request $request): ?array
+    private function detailCinemaIds(Request $request): ?array
     {
         $route = $request->route();
+        $routeName = $route?->getName();
 
-        if ($route === null || $route->getName() !== 'front.movie.show') {
+        if ($route === null || ! in_array($routeName, ['front.movie.show', 'front.news.show'], true)) {
             return null;
         }
 
-        $movieId = $route->parameter('id');
+        $id = $route->parameter('id');
 
         /** ルート制約 `whereNumber('id')` により通常は成立する。型を確定させるためのガード。 */
-        if (! is_numeric($movieId)) {
+        if (! is_numeric($id)) {
             return [];
         }
 
+        if ($routeName === 'front.news.show') {
+            $post = Post::query()->published()->whereKey((int) $id)->first(['id', 'cinema_id']);
+
+            if ($post === null) {
+                return [];
+            }
+
+            return $post->cinema_id === null ? null : [(int) $post->cinema_id];
+        }
+
         return Booking::query()
-            ->where('movie_id', (int) $movieId)
+            ->where('movie_id', (int) $id)
             ->distinct()
             ->pluck('cinema_id')
-            ->map(fn (int|string $id): int => (int) $id)
+            ->map(fn (int|string $cinemaId): int => (int) $cinemaId)
             ->all();
     }
 
@@ -73,11 +89,11 @@ class Header extends Component
      * パラメータを保ったまま `slug` だけを差し替える（4.1.3-4 / design.md 4.1.3追記表382行目）。
      * `{slug}` を持たないページ（館非依存ページ）には「同種のページ」が存在しないため、
      * 切替先の館トップへ遷移する（design.md 4.1.3追記表）。
-     * 作品詳細（P-23）で切替先の館が当該作品を上映していない場合も同様に館トップへ遷移する。
+     * 詳細ページ（P-23・P-26）で切替先の館に同じ作品・記事が無い場合も同様に館トップへ遷移する。
      *
-     * @param  array<int, int>|null  $movieCinemaIds  P-23 のとき、作品を上映する館のID
+     * @param  array<int, int>|null  $detailCinemaIds  詳細ページのとき、同じ作品・記事を表示できる館のID
      */
-    private function switchUrl(Request $request, Cinema $target, ?array $movieCinemaIds): string
+    private function switchUrl(Request $request, Cinema $target, ?array $detailCinemaIds): string
     {
         $route = $request->route();
         $routeName = $route?->getName();
@@ -86,7 +102,7 @@ class Header extends Component
             return route('front.cinema.show', ['slug' => $target->slug]);
         }
 
-        if ($movieCinemaIds !== null && ! in_array($target->id, $movieCinemaIds, true)) {
+        if ($detailCinemaIds !== null && ! in_array($target->id, $detailCinemaIds, true)) {
             return route('front.cinema.show', ['slug' => $target->slug]);
         }
 
