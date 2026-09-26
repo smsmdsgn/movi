@@ -61,13 +61,39 @@ class Banner extends Model
     }
 
     /**
+     * 掲載期間内のバナーに絞る（4.7.2-2）。境界は両端を含む（4.7.5追記表）。
+     *
+     * **`isVisibleAt()` と同じ条件をSQLで表したもの。** 片方だけを変更しないこと。
+     *
+     * @param  Builder<Banner>  $query
+     * @return Builder<Banner>
+     */
+    #[Scope]
+    protected function visibleAt(Builder $query, CarbonImmutable $at): Builder
+    {
+        /** バインド時にも秒で切り捨てられるが、`isVisibleAt()` と同じ値であることを明示する。 */
+        $at = $at->startOfSecond();
+
+        return $query
+            ->where(fn (Builder $scoped) => $scoped
+                ->whereNull($this->qualifyColumn('starts_at'))
+                ->orWhere($this->qualifyColumn('starts_at'), '<=', $at))
+            ->where(fn (Builder $scoped) => $scoped
+                ->whereNull($this->qualifyColumn('ends_at'))
+                ->orWhere($this->qualifyColumn('ends_at'), '>=', $at));
+    }
+
+    /**
      * 掲載期間内か（4.7.2-2「公開期間外は非表示。期間未指定の場合は常時掲載」）。
      *
-     * **同じ条件をSQLで表すクエリスコープは、顧客側の表示（工程7-d）で追加する。**
-     * 判定が2系統になるため、片方だけを変更しないこと（4.7.5追記表）。
+     * **`visibleAt()`（クエリスコープ）と同じ条件。** 判定が2系統になるため、
+     * 片方だけを変更しないこと（4.7.5追記表）。
      */
     public function isVisibleAt(CarbonImmutable $at): bool
     {
+        /** SQL へのバインドは秒単位に切り捨てられるため、`visibleAt()` と揃えて秒で比較する。 */
+        $at = $at->startOfSecond();
+
         if ($this->starts_at !== null && $this->starts_at->greaterThan($at)) {
             return false;
         }
@@ -99,6 +125,29 @@ class Banner extends Model
     public function imageUrl(): ?string
     {
         return $this->hasImage() ? Storage::disk('public')->url($this->image_path) : null;
+    }
+
+    /**
+     * 顧客側の `href` に出してよいリンク先。`http` / `https` の絶対URLか、`/` で始まる
+     * 自サイトのパスに限り、それ以外は null（リンクにしない）を返す。
+     *
+     * A-13 の検証（`url:http,https`、17.5.2-4）を通らない経路（シーダー・DBの直接操作）で
+     * 入った値も、出力の時点で弾く。`//host` と `/\host` はブラウザが別ホストとして
+     * 解釈するため自サイトのパスとして扱わない（`PostBodyService` と同じ判定）。
+     */
+    public function safeLinkUrl(): ?string
+    {
+        $url = $this->link_url;
+
+        if ($url === null) {
+            return null;
+        }
+
+        if (preg_match('#\Ahttps?://[^\s]+\z#i', $url) === 1 || preg_match('#\A/(?![/\\\\])[^\s]*\z#', $url) === 1) {
+            return $url;
+        }
+
+        return null;
     }
 
     /**

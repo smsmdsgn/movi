@@ -91,6 +91,26 @@ return [
         'period' => ':from 〜 :to',
         'schedule_heading' => '上映スケジュール',
         'view_schedule' => '上映スケジュールを見る',
+
+        /* カルーセルスライダー（7.3-4）。自動送りはしない。 */
+        'carousel' => [
+            'label' => '注目のお知らせ・キャンペーン',
+            'prev' => '前のスライドを表示',
+            'next' => '次のスライドを表示',
+            'slide_label' => ':current / :total',
+            'goto_slide' => ':numberページ目のスライドを表示',
+        ],
+
+        /* お知らせ／キャンペーン・重要なお知らせ（7.3-6・7）。見出しはカテゴリー名を使う。 */
+        'news' => [
+            'empty' => ':categoryに該当する情報はまだありません。',
+            'archive_link' => ':categoryの一覧を見る',
+        ],
+
+        /* 各種バナーリンク（7.3-9） */
+        'footer_banners' => [
+            'label' => '関連リンク',
+        ],
     ],
 
     /*

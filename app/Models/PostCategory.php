@@ -17,6 +17,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['slug', 'name'])]
 class PostCategory extends Model
 {
+    /** 「お知らせ」の slug（4.7.1）。 */
+    public const SLUG_NOTICE = 'notice';
+
+    /** 「キャンペーン」の slug（4.7.1）。 */
+    public const SLUG_CAMPAIGN = 'campaign';
+
     /** 「重要なお知らせ」の slug（4.7.1）。顧客側で強調して表示する（7.3-6）。 */
     public const SLUG_IMPORTANT = 'important';
 
