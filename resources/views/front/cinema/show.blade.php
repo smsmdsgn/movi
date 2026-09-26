@@ -57,6 +57,11 @@
 
         <h1 class="mt-4 text-2xl font-bold">{{ $cinema->name }}</h1>
         <p class="mt-1 text-sm text-stone-600">{{ $cinema->concept }}</p>
+        {{-- 施設案内・アクセス（P-27・P-28）への導線（7.18）。 --}}
+        <ul class="mt-2 flex flex-wrap gap-4 text-sm">
+            <li><a href="{{ route('front.establishment.index', ['slug' => $cinema->slug]) }}" class="font-bold text-brand underline">{{ __('front.establishment.heading') }}</a></li>
+            <li><a href="{{ route('front.access.index', ['slug' => $cinema->slug]) }}" class="font-bold text-brand underline">{{ __('front.access.heading') }}</a></li>
+        </ul>
 
         {{-- メインバナー（7.3-2）。ファーストビューのため eager 読み込みとする（13.5-6）。 --}}
         @if ($mainBanner !== null)

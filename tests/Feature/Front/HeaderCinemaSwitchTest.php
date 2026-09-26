@@ -1,6 +1,10 @@
 <?php
 
+use App\Http\Controllers\Front\EstablishmentController;
+use App\Http\Middleware\SkipCinemaScope;
+use App\Models\Cinema;
 use App\Models\User;
+use Illuminate\Support\Facades\Route;
 
 it('館別ページでは劇場切替が同種のページのURLになる（4.1.3-4）', function () {
     createCinema('gion', '祇園ムビ');
@@ -22,12 +26,26 @@ it('館別ページの劇場切替は slug 以外のURIパラメータを引き�
 });
 
 it('館別ページの劇場切替は defaults() 由来のパラメータをURLに付けない（4.1.3追記表）', function () {
+    /*
+     * 実在の館別ルートは defaults() を持たなくなった（工程7-e）ため、テスト用に1本登録して
+     * Header::switchUrl() の除外処理（Arr::only(parameters, parameterNames)）を通す。
+     */
+    Route::middleware(['web', SkipCinemaScope::class, 'cinema'])
+        ->prefix('cinemas/{slug}')
+        ->where(['slug' => Cinema::SLUG_REGEX])
+        ->group(function (): void {
+            Route::get('defaults-probe', EstablishmentController::class)
+                ->defaults('screenId', 'P-99')
+                ->name('front.defaults-probe');
+        });
+    Route::getRoutes()->refreshNameLookups();
+
     createCinema('gion', '祇園ムビ');
     createCinema('kyoto', 'ムビ京都');
 
-    $this->get(route('front.establishment.index', ['slug' => 'gion']))
+    $this->get(route('front.defaults-probe', ['slug' => 'gion']))
         ->assertOk()
-        ->assertSee('value="'.route('front.establishment.index', ['slug' => 'kyoto']).'"', false)
+        ->assertSee('value="'.route('front.defaults-probe', ['slug' => 'kyoto']).'"', false)
         ->assertDontSee('screenId=', false);
 });
 

@@ -177,3 +177,12 @@ it('離れた再上映がある作品は、区分に該当する編成の期間�
     expect($html)->toContain('2026/12/1 〜 2026/12/31');
     expect($html)->not->toContain('2026/6/1 〜 2026/12/31');
 });
+
+it('施設案内・アクセス（P-27・P-28）へのリンクを表示する（7.18）', function () {
+    createCinema('gion', '祇園ムビ');
+
+    $this->get(route('front.cinema.show', ['slug' => 'gion']))
+        ->assertOk()
+        ->assertSee('href="'.route('front.establishment.index', ['slug' => 'gion']).'"', false)
+        ->assertSee('href="'.route('front.access.index', ['slug' => 'gion']).'"', false);
+});

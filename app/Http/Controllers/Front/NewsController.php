@@ -13,8 +13,8 @@ use Illuminate\View\View;
  * お知らせ一覧（P-24）・カテゴリー別（P-25、7.1.1 / 4.7.1）。同一のビューを共用する。
  *
  * $cinema は ResolveCinema がコンテナへバインドした館（13.4.1）。`{category}` は
- * ルート定義上の位置引数のため、`PlaceholderController` と同様に `$request->route()` で
- * 取り出す（P-25 のみ値を持つ。P-24 のときは null）。
+ * ルート定義上の位置引数のため `$request->route()` で取り出す
+ *（P-25 のみ値を持つ。P-24 のときは null）。
  */
 class NewsController extends Controller
 {

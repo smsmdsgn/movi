@@ -28,21 +28,23 @@ it('routes/ で定義したルートのアクションにクロージャを使�
     expect($closureRoutes)->toBeEmpty();
 });
 
-it('館別ページで {slug} の館を解決し、画面IDに対応するページを返す', function (string $routeName, string $screenId, array $parameters) {
+it('P-27 施設案内が解決された館名を表示する', function () {
     createCinema('gion', '祇園ムビ');
 
-    /*
-     * ヘッダーの劇場切替セレクトボックスにも館名が候補として出るため、
-     * 解決された館を表す data-testid="cinema-name" の内容で判定する。
-     */
-    $this->get(route($routeName, ['slug' => 'gion', ...$parameters]))
+    $this->get(route('front.establishment.index', ['slug' => 'gion']))
         ->assertOk()
         ->assertSee('data-testid="cinema-name">祇園ムビ<', false)
-        ->assertSee($screenId);
-})->with([
-    'P-27 施設案内' => ['front.establishment.index', 'P-27', []],
-    'P-28 アクセス' => ['front.access.index', 'P-28', []],
-]);
+        ->assertDontSee('P-27');
+});
+
+it('P-28 アクセスが解決された館名を表示する', function () {
+    createCinema('gion', '祇園ムビ');
+
+    $this->get(route('front.access.index', ['slug' => 'gion']))
+        ->assertOk()
+        ->assertSee('data-testid="cinema-name">祇園ムビ<', false)
+        ->assertDontSee('P-28');
+});
 
 it('P-21〜P-23 は画面IDを表示せず、解決された館名（data-testid="cinema-name"）を表示する（工程4で実装）', function () {
     createCinema('gion', '祇園ムビ');

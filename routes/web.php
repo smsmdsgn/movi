@@ -1,10 +1,12 @@
 <?php
 
+use App\Http\Controllers\Front\AccessController;
 use App\Http\Controllers\Front\AgreementController;
 use App\Http\Controllers\Front\ChainTopController;
 use App\Http\Controllers\Front\CinemaTopController;
 use App\Http\Controllers\Front\ConfirmController;
 use App\Http\Controllers\Front\CustomerInfoController;
+use App\Http\Controllers\Front\EstablishmentController;
 use App\Http\Controllers\Front\IdentifyController;
 use App\Http\Controllers\Front\LookupController;
 use App\Http\Controllers\Front\MovieController;
@@ -14,7 +16,6 @@ use App\Http\Controllers\Front\NewsController;
 use App\Http\Controllers\Front\NewsDetailController;
 use App\Http\Controllers\Front\PagePlaceholderController;
 use App\Http\Controllers\Front\PaymentController;
-use App\Http\Controllers\Front\PlaceholderController;
 use App\Http\Controllers\Front\ReservationCompleteController;
 use App\Http\Controllers\Front\ScheduleController;
 use App\Http\Controllers\Front\SeatSelectionController;
@@ -111,9 +112,8 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
     |--------------------------------------------------------------------------
     |
     | {slug} は ResolveCinema が館へ解決してコンテナへバインドする（13.4.1）。
-    | P-21〜P-23 は工程4で、P-24〜P-26（お知らせ）は工程7-cで実装済み。P-27・P-28 は
-    | 該当工程（11.1）で実装するため、現時点は PlaceholderController が画面IDと館名の
-    | みを返す。画面IDは defaults() でコントローラへ渡す。
+    | P-21〜P-28 はすべて実装済み（P-21〜P-23 は工程4、P-24〜P-26（お知らせ）は
+    | 工程7-c、P-27（施設案内）・P-28（アクセス）は工程7-e）。
     |
     | ルートのアクションにクロージャを使用しないこと。route:cache（15.3.2）は
     | クロージャを直列化する際に外側の候補を選び、エラーを出さないまま
@@ -131,8 +131,8 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
             Route::get('news', NewsController::class)->name('news.index');
             Route::get('news/detail/{id}', NewsDetailController::class)->name('news.show')->whereNumber('id');
             Route::get('news/{category}', NewsController::class)->name('news.category');
-            Route::get('establishment', PlaceholderController::class)->defaults('screenId', 'P-27')->name('establishment.index');
-            Route::get('access', PlaceholderController::class)->defaults('screenId', 'P-28')->name('access.index');
+            Route::get('establishment', EstablishmentController::class)->name('establishment.index');
+            Route::get('access', AccessController::class)->name('access.index');
         });
 
 });

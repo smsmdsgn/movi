@@ -16,7 +16,7 @@ use Illuminate\View\View;
  *
  * $cinema は ResolveCinema がコンテナへバインドした館（13.4.1）。
  * `{id}` はコントローラの引数では受け取らない（ルートパラメータは `{slug}` を含めて
- * 位置で渡されるため、`PlaceholderController` と同様に `$request->route()` で取り出す）。
+ * 位置で渡されるため `$request->route()` で取り出す）。
  */
 class MovieController extends Controller
 {

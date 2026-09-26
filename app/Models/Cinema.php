@@ -77,6 +77,21 @@ class Cinema extends Model
     }
 
     /**
+     * 顧客側の地図の iframe（P-28）の `src` に出してよい埋め込みURL。`https://www.google.com/` で
+     * 始まり空白を含まない場合に限り、それ以外は null（地図を出さない）を返す。
+     *
+     * A-03 の検証のうちホストの制限（`https://www.google.com/` 始まり）を出力時にも課し、
+     * 検証を通らない経路（シーダー・DBの直接操作）の値を弾く。CSP の `frame-src`（17.7）が
+     * 許可する埋め込み先と一致させる。
+     */
+    public function safeMapEmbedUrl(): ?string
+    {
+        return preg_match('#\Ahttps://www\.google\.com/[^\s]*\z#', $this->map_embed_url) === 1
+            ? $this->map_embed_url
+            : null;
+    }
+
+    /**
      * @return HasMany<Theater, $this>
      */
     public function theaters(): HasMany
