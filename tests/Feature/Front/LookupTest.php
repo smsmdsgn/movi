@@ -121,8 +121,8 @@ it('ページが照会フォームを表示し、クロール対象外となる�
 });
 
 it('館が1件も存在しない場合は404を返す（他の館非依存ページと揃える）', function () {
-    // ヘッダーの描画中に `firstOrFail()` が落ちると、ビューの例外に包まれて 500 になる。
-    // P-08〜P-20（`PagePlaceholderController`）は 404 を返すため、揃えておく。
+    // ヘッダーの描画中に `firstOrFail()` が落ちても、`RecordsNotFoundException` はビューの
+    // 例外に包まれずに投げ直されるため 404 になる。他の館非依存ページ（P-08〜P-20）と同じ応答であることを固定する。
     $this->get(route('front.lookup.index'))->assertNotFound();
 });
 

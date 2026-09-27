@@ -95,7 +95,8 @@ class Agreement extends Component
             'noticeKey' => $this->noticeKey($screening !== null, $seats->isNotEmpty(), $locks),
             'maxSeats' => SeatLockService::MAX_SEATS_PER_HOLDER,
             'seatsUrl' => route('front.reservation.seats', ['id' => $this->screeningId]),
-            'termsUrl' => route('front.terms.index'),
+            // オンラインチケット購入の条項へ直接遷移させる（P-16、4.3.7-6）。
+            'termsUrl' => route('front.terms.index').'#online-ticket',
         ]);
     }
 

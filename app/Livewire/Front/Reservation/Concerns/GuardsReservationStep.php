@@ -79,7 +79,7 @@ trait GuardsReservationStep
         }
 
         // 非会員がお客様情報（P-34）を入力していない。P-32 の後に P-35 以降のURLへ直接
-        // 到達すると、連絡先を持たないまま決済へ進める（12章 残課題25-a）。
+        // 到達すると、連絡先を持たないまま決済へ進める（旧12章 残課題25-a）。
         if ($this->requiresGuestInput() && Auth::guest() && $this->draft()->guest($this->screeningId) === null) {
             return $this->status(
                 'front.reservation.errors.customer_info_required',

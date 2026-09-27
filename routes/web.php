@@ -7,6 +7,7 @@ use App\Http\Controllers\Front\CinemaTopController;
 use App\Http\Controllers\Front\ConfirmController;
 use App\Http\Controllers\Front\CustomerInfoController;
 use App\Http\Controllers\Front\EstablishmentController;
+use App\Http\Controllers\Front\FoodController;
 use App\Http\Controllers\Front\IdentifyController;
 use App\Http\Controllers\Front\LookupController;
 use App\Http\Controllers\Front\MovieController;
@@ -16,9 +17,11 @@ use App\Http\Controllers\Front\NewsController;
 use App\Http\Controllers\Front\NewsDetailController;
 use App\Http\Controllers\Front\PagePlaceholderController;
 use App\Http\Controllers\Front\PaymentController;
+use App\Http\Controllers\Front\PriceController;
 use App\Http\Controllers\Front\ReservationCompleteController;
 use App\Http\Controllers\Front\ScheduleController;
 use App\Http\Controllers\Front\SeatSelectionController;
+use App\Http\Controllers\Front\SitemapController;
 use App\Http\Controllers\Front\TicketSelectionController;
 use App\Http\Middleware\SkipCinemaScope;
 use App\Models\Cinema;
@@ -45,10 +48,13 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
     | 館非依存ページ（7.1.1 P-01, P-05〜P-20）
     |--------------------------------------------------------------------------
     |
-    | P-01（チェーントップ）は実装済み。それ以外は工程2ではルート骨格のみを
-    | 実装するため、PagePlaceholderController が画面IDと現在の館（ヘッダー表示用、
-    | CurrentCinemaService で解決）のみを返す。各画面の実装（該当フェーズ、11.1）で
-    | 画面ごとの内容へ差し替える。
+    | P-01（チェーントップ）は実装済み。P-08〜P-13・P-16〜P-20 は工程7-fで実装済み。
+    | データを要する P-08（料金表）・P-09（フード）・P-20（サイトマップ）のみ
+    | invokable コントローラを持ち、それ以外は本文が lang の固定文言のみのため
+    | `Route::view()` で直接ビューを返す（クロージャを使わないため route:cache
+    | と両立する。15.3.2）。P-14・P-15（お問い合わせ）は未実装のため、引き続き
+    | PagePlaceholderController が画面IDと現在の館（ヘッダー表示用、
+    | CurrentCinemaService で解決）のみを返す。
     |
     | P-02（会員登録）・P-03（ログイン）・P-04（パスワード再設定）は対象外。
     | P-03・P-04 は Fortify が既に実ルートとして提供しており、いずれも認証画面
@@ -67,7 +73,8 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
     |
     | P-07（予約照会）は工程5-nで実装済み（LookupController ＋ Livewire。4.3.17 / 7.19）。
     | 館非依存ページだが、館の解決はヘッダーのビューコンポーネントに任せるため
-    | PagePlaceholderController と異なりコントローラでは解決しない。
+    | PagePlaceholderController と異なりコントローラでは解決しない。P-08〜P-13・
+    | P-16〜P-20 も同様に、館をコントローラ・ビューで扱わない（工程7-f）。
     |
     | P-05（マイページ）は工程6-aで実装済み（MyPageController。7.14）。P-06（予約詳細）
     | は工程6-bで実装済み（MyPageReservationController ＋ Livewire。4.5.4 / 7.14）。
@@ -83,19 +90,19 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
             Route::get('mypage/reservations/{id}', MyPageReservationController::class)->name('mypage.reservation.show')->whereNumber('id');
         });
         Route::get('lookup', LookupController::class)->name('lookup.index');
-        Route::get('prices', PagePlaceholderController::class)->defaults('screenId', 'P-08')->name('prices.index');
-        Route::get('food', PagePlaceholderController::class)->defaults('screenId', 'P-09')->name('food.index');
-        Route::get('presale', PagePlaceholderController::class)->defaults('screenId', 'P-10')->name('presale.index');
-        Route::get('faq', PagePlaceholderController::class)->defaults('screenId', 'P-11')->name('faq.index');
-        Route::get('recruit', PagePlaceholderController::class)->defaults('screenId', 'P-12')->name('recruit.index');
-        Route::get('company', PagePlaceholderController::class)->defaults('screenId', 'P-13')->name('company.index');
+        Route::get('prices', PriceController::class)->name('prices.index');
+        Route::get('food', FoodController::class)->name('food.index');
+        Route::view('presale', 'front.pages.presale')->name('presale.index');
+        Route::view('faq', 'front.pages.faq')->name('faq.index');
+        Route::view('recruit', 'front.pages.recruit')->name('recruit.index');
+        Route::view('company', 'front.pages.company')->name('company.index');
         Route::get('contact', PagePlaceholderController::class)->defaults('screenId', 'P-14')->name('contact.index');
         Route::get('contact/complete', PagePlaceholderController::class)->defaults('screenId', 'P-15')->name('contact.complete');
-        Route::get('terms', PagePlaceholderController::class)->defaults('screenId', 'P-16')->name('terms.index');
-        Route::get('privacy', PagePlaceholderController::class)->defaults('screenId', 'P-17')->name('privacy.index');
-        Route::get('cookie-policy', PagePlaceholderController::class)->defaults('screenId', 'P-18')->name('cookie-policy.index');
-        Route::get('legal', PagePlaceholderController::class)->defaults('screenId', 'P-19')->name('legal.index');
-        Route::get('sitemap', PagePlaceholderController::class)->defaults('screenId', 'P-20')->name('sitemap.index');
+        Route::view('terms', 'front.pages.terms')->name('terms.index');
+        Route::view('privacy', 'front.pages.privacy')->name('privacy.index');
+        Route::view('cookie-policy', 'front.pages.cookie-policy')->name('cookie-policy.index');
+        Route::view('legal', 'front.pages.legal')->name('legal.index');
+        Route::get('sitemap', SitemapController::class)->name('sitemap.index');
         Route::get('screenings/{id}/seats', SeatSelectionController::class)->name('reservation.seats')->whereNumber('id');
         Route::get('screenings/{id}/agreement', AgreementController::class)->name('reservation.agreement')->whereNumber('id');
         Route::get('screenings/{id}/identify', IdentifyController::class)->name('reservation.identify')->whereNumber('id');
