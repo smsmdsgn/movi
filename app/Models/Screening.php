@@ -48,6 +48,12 @@ class Screening extends Model
      */
     public const int CANCEL_DEADLINE_MINUTES = 20;
 
+    /**
+     * 入場の受付開始は上映開始の何分前か（4.6.4-3）。入場ゲート（A-16）の判定は
+     * 本定数と `isBeforeEntryOpens()` / `hasEnded()` を参照する。
+     */
+    public const int ENTRY_OPENS_MINUTES_BEFORE = 60;
+
     protected function casts(): array
     {
         return [
@@ -104,6 +110,33 @@ class Screening extends Model
     public function acceptsCancellationAt(?CarbonImmutable $now = null): bool
     {
         return ($now ?? Date::now())->isBefore($this->cancelDeadline());
+    }
+
+    /**
+     * 入場の受付開始時刻（4.6.4-3）。上映開始の60分前。
+     */
+    public function entryOpensAt(): CarbonImmutable
+    {
+        return $this->starts_at->subMinutes(self::ENTRY_OPENS_MINUTES_BEFORE);
+    }
+
+    /**
+     * 入場の受付開始前か（4.6.4-3）。**受付開始ちょうどは受け付ける。**
+     */
+    public function isBeforeEntryOpens(?CarbonImmutable $now = null): bool
+    {
+        return ($now ?? Date::now())->isBefore($this->entryOpensAt());
+    }
+
+    /**
+     * 上映が終了したか。**終了時刻ちょうどはまだ終了していない**とみなす。
+     *
+     * 入場の受付（4.6.4-3「上映終了時刻を経過」）と入場の取消の期限（4.6.5「終了時刻まで」）の
+     * 双方がここを通り、境界を1箇所に持つ（`acceptsCancellationAt()` と同じ理由）。
+     */
+    public function hasEnded(?CarbonImmutable $now = null): bool
+    {
+        return ($now ?? Date::now())->isAfter($this->ends_at);
     }
 
     /**

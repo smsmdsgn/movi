@@ -9,6 +9,7 @@ use App\Models\Screening;
 use App\Models\Seat;
 use App\Models\TicketType;
 use App\Models\User;
+use Illuminate\Support\Str;
 
 /*
  * 予約完了（P-38、7.13）。表示項目と、到達の可否（所有者の判定、17.2.1 / 12章 旧残課題34）を
@@ -47,6 +48,8 @@ function completedReservation(
         'screening_id' => $screening->id,
         'status' => $status,
         'total_amount' => $seatAmount * $seatCount,
+        // 確定済みの予約は入場コードを持つ（4.6.2-1。ReservationService::confirm()）。
+        'entry_code' => Str::random(32),
     ]);
 
     foreach ($seats as $seat) {
@@ -77,7 +80,10 @@ it('確定させたブラウザに予約番号・予約内容・導線を表示�
         ->assertSee($seats[1]->displayName())
         ->assertSee(TicketType::ADULT_NAME)
         ->assertSee(__('front.reservation.yen', ['amount' => '4,000']))
-        // 7.13-2 / 7.13-4 / 7.13-5 は未実装（12章 残課題36）。代替手段を案内する
+        // 7.13-2 入場用QRコード
+        ->assertSee('data:image/png;base64,', escape: false)
+        ->assertSee(__('front.reservation.complete.entry_guide'))
+        // 7.13-4 / 7.13-5 は未実装（12章 残課題36）。代替手段を案内する
         ->assertSee(__('front.reservation.complete.entry_pending'))
         // 7.13-6 予約照会への導線
         ->assertSee(route('front.lookup.index'))

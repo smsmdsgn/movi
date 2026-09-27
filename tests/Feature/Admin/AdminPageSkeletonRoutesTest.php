@@ -2,23 +2,15 @@
 
 use App\Enums\AdminRole;
 
-it('未実装画面（4.8.5 A-16）のルートが認証済み管理者に画面IDを返す', function (string $routeName, string $screenId) {
-    $this->actingAs(createAdmin(), 'admin')
-        ->get(route($routeName))
-        ->assertOk()
-        ->assertSee($screenId);
-})->with([
-    'A-16 入場ゲート' => ['admin.gate.index', 'A-16'],
-]);
-
 it('cinema-admin は入場ゲート（A-16）へ到達できる（4.8.2）', function () {
     // 4.8.2 は「バナー・管理者アカウント管理を除く全画面」を `cinema-admin` に許すが、
     // 実装済みの画面はそれぞれのテストが到達を固定している（A-12 は PostManagementTest、
-    // A-13 は到達不可のため BannerManagementTest）。ここに残るのは未実装の A-16 のみ。
+    // A-13 は到達不可のため BannerManagementTest）。A-16 はここで見出しの表示を固定する
+    // （個別の判定・表示項目は EntryGateTest が担う）。
     $this->actingAs(createAdmin(AdminRole::CinemaAdmin, createCinema()), 'admin')
         ->get(route('admin.gate.index'))
         ->assertOk()
-        ->assertSee('A-16');
+        ->assertSee(__('admin.gate.title'));
 });
 
 it('管理画面ダッシュボード（A-02）が認証済み管理者に表示される', function () {
@@ -56,7 +48,7 @@ it('未ログインで管理画面配下にアクセスすると admin.login へ
 ]);
 
 it('gate ロールは入場ゲート以外の管理画面へ到達できない（T-12 / 17.1.3）', function (string $routeName) {
-    $this->actingAs(createAdmin(AdminRole::Gate), 'admin')
+    $this->actingAs(createAdmin(AdminRole::Gate, createCinema()), 'admin')
         ->get(route($routeName))
         ->assertForbidden();
 })->with([
@@ -77,7 +69,7 @@ it('gate ロールは入場ゲート以外の管理画面へ到達できない�
 ]);
 
 it('gate ロールは入場ゲート画面へ到達できる（T-12）', function () {
-    $this->actingAs(createAdmin(AdminRole::Gate), 'admin')
+    $this->actingAs(createAdmin(AdminRole::Gate, createCinema()), 'admin')
         ->get(route('admin.gate.index'))
         ->assertOk();
 });
@@ -100,7 +92,7 @@ it('cinema-admin にはサイドバーのバナー・管理者アカウント管
 });
 
 it('gate ロールのサイドバーには入場ゲート以外の項目が表示されない（T-12）', function () {
-    $this->actingAs(createAdmin(AdminRole::Gate), 'admin')
+    $this->actingAs(createAdmin(AdminRole::Gate, createCinema()), 'admin')
         ->get(route('admin.gate.index'))
         ->assertOk()
         ->assertDontSee(__('admin.nav.dashboard'))

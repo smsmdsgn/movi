@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\StripeException;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
@@ -65,6 +66,9 @@ function lookupReservation(
         'screening_id' => $screening->id,
         'status' => $status,
         'total_amount' => $seatAmount * $seatCount,
+        // 確定済みの予約は入場コードを持つ（4.6.2-1）。キャンセル後も残る値のため、
+        // 状態に関わらず設定する。
+        'entry_code' => Str::random(32),
     ]);
 
     // 確定済みの予約は PaymentIntent のIDを持つ（4.3.15）。キャンセルの返金先になるため
@@ -135,8 +139,11 @@ it('方式A（予約番号＋メールアドレス）で予約を表示する（
         ->assertSee($seats[0]->displayName())
         ->assertSee(TicketType::ADULT_NAME)
         ->assertSee(__('front.lookup.status.paid'))
-        // 入場用QRコード・領収書は未実装（12章 残課題18 / 36）。代替手段を案内する。
-        ->assertSee(__('front.lookup.entry_pending'))
+        // 入場用QRコード（4.6.2）
+        ->assertSee('data:image/png;base64,', escape: false)
+        ->assertSee(__('front.lookup.entry_guide'))
+        ->assertSee(__('front.lookup.entry_fallback'))
+        // 領収書は未実装（12章 残課題36）。代替手段を案内する。
         ->assertSee(__('front.lookup.receipt_pending'));
 });
 
@@ -230,7 +237,8 @@ it('キャンセル済みの予約も照会でき、上映回が変わりうる�
         ->assertSee(__('front.lookup.cancelled_note'))
         ->assertSee(__('front.lookup.cancelled_at'))
         // キャンセル済みに入場の案内は出さない。
-        ->assertDontSee(__('front.lookup.entry_pending'));
+        ->assertDontSee(__('front.lookup.entry_guide'))
+        ->assertDontSee('data:image/png;base64,', escape: false);
 });
 
 /*

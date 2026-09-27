@@ -11,6 +11,7 @@ use App\Models\TicketType;
 use App\Models\User;
 use App\Services\StripeException;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Livewire\Livewire;
 
@@ -51,6 +52,8 @@ function detailReservation(
         'screening_id' => $screening->id,
         'status' => $status,
         'total_amount' => $seatAmount * $seatCount,
+        // 確定済みの予約は入場コードを持つ（4.6.2-1）。
+        'entry_code' => Str::random(32),
     ]);
 
     // 確定済みの予約は PaymentIntent のIDを持つ（4.3.15）。返金先になるため省略しない。
@@ -96,8 +99,10 @@ it('予約内容を表示し、クロール対象外となる（7.14 / 19.3-6）
         ->assertSee($seats[0]->displayName())
         ->assertSee(TicketType::ADULT_NAME)
         ->assertSee(__('front.lookup.status.paid'))
-        // 入場用QRコード・領収書は準備中の案内に留める（12章 残課題18 / 36）。
-        ->assertSee(__('front.lookup.entry_pending'))
+        // 入場用QRコード（4.6.2）
+        ->assertSee('data:image/png;base64,', escape: false)
+        ->assertSee(__('front.lookup.entry_guide'))
+        // 領収書は準備中の案内に留める（12章 残課題36）。
         ->assertSee(__('front.lookup.receipt_pending'))
         ->assertSee('name="robots" content="noindex, nofollow"', escape: false);
 });
@@ -173,7 +178,7 @@ it('キャンセル済みには上映回の情報が変更されうる旨を注�
         ->assertSee(__('front.lookup.status.cancelled'))
         ->assertSee(__('front.lookup.cancelled_note'))
         // キャンセル済みには入場の案内もキャンセルの節も出さない（7.19-6・8）。
-        ->assertDontSee(__('front.lookup.entry_pending'))
+        ->assertDontSee(__('front.lookup.entry_guide'))
         ->assertDontSee(__('front.cancel.heading'));
 });
 

@@ -9,10 +9,10 @@ use App\Models\User;
 use App\Services\CompletedReservations;
 
 /**
- * 予約状況の確認（A-10）・予約検索（A-11）と、顧客側の予約の参照（P-38 / P-06）の
- * 権限を判定する。管理者側は参照のみである。
+ * 予約状況の確認（A-10）・予約検索（A-11）・入場の記録と取消（A-16 / A-11）と、
+ * 顧客側の予約の参照（P-38 / P-06）の権限を判定する。
  *
- * **アビリティごとに判定の相手が異なる。** `viewAny` は管理者（`Admin`、管理者ガード。
+ * **アビリティごとに判定の相手が異なる。** `viewAny`・`checkIn`・`revokeCheckIn` は管理者（`Admin`、管理者ガード。
  * `Gate::forUser($admin)` から呼ぶ）、`view` は顧客（`User`、既定のガード。非会員は
  * ゲストのため null）、`viewOwn` は会員（`User`。マイページは会員専用）を受ける。予約は管理者と顧客の双方が参照する唯一のモデルであり、
  * Laravel はモデルに対して1つの Policy しか結び付けないため、同一クラスに両者を置く。
@@ -29,6 +29,24 @@ use App\Services\CompletedReservations;
 class ReservationPolicy
 {
     public function viewAny(Admin $admin): bool
+    {
+        return $admin->is_active && $admin->role !== AdminRole::Gate;
+    }
+
+    /**
+     * 入場ゲート（A-16）で入場を記録できるか（4.8.2「入場確認」/ 17.1.3）。
+     * 全役割に許す。館の範囲は端末の館（`Cinema::visibleTo()`）で決まり、本Policyでは扱わない。
+     */
+    public function checkIn(Admin $admin): bool
+    {
+        return $admin->is_active;
+    }
+
+    /**
+     * 入場を取り消せるか（4.6.5 / 4.8.2「入場の取消」）。`gate` は入場確認のみを行う（17.1.3）。
+     * 館の範囲は A-11 の可視範囲（`CinemaScope`）に委ねる。
+     */
+    public function revokeCheckIn(Admin $admin): bool
     {
         return $admin->is_active && $admin->role !== AdminRole::Gate;
     }

@@ -9,9 +9,9 @@
     $seats: Collection<ReservationSeat>（座席表と同じ並び順）
     $cinema: Cinema（予約から定まる館。`CurrentCinemaService::remember()` が確定させたもの）
 
-    **入場用QRコード（7.13-2）・領収書（7.13-4）・予約確定メールの案内（7.13-5）は
-    本画面では未実装**（12章 残課題36）。QRは工程8（`endroid/qr-code` の導入）、メールは
-    メール実装の工程（8.3 / 21.1）で加える。
+    **入場用QRコード（7.13-2）は工程8で実装済み。領収書（7.13-4）・予約確定メールの
+    案内（7.13-5）は本画面では未実装**（12章 残課題36）。メールはメール実装の工程
+    （8.3 / 21.1）で加える。
 --}}
 @php
     /** @var \App\Models\Reservation $reservation */
@@ -79,11 +79,22 @@
             <p class="mt-2 text-xs text-stone-600">{{ __('front.reservation.complete.amount_note') }}</p>
         </section>
 
-        {{-- 7.13-2 / 7.13-4 / 7.13-5 は未実装（12章 残課題36）。窓口での代替手段を案内する。 --}}
+        {{-- 7.13-2 入場用QRコード。読み取れない場合の代替手段（予約番号）もあわせて案内する。 --}}
         <section aria-labelledby="entry-heading" class="mt-4 border border-stone-300 bg-stone-50 p-4">
             <h2 id="entry-heading" class="font-bold">{{ __('front.reservation.complete.entry_heading') }}</h2>
-            <p class="mt-2 text-sm">{{ __('front.reservation.complete.entry_pending') }}</p>
+
+            @if ($reservation->entry_code !== null)
+                <div class="mt-3 flex justify-center">
+                    <x-entry-qr-code :code="$reservation->entry_code" :alt="__('front.reservation.complete.entry_heading')" />
+                </div>
+
+                <p class="mt-2 text-sm">{{ __('front.reservation.complete.entry_guide') }}</p>
+                <p class="mt-1 text-sm">{{ __('front.reservation.complete.entry_fallback') }}</p>
+            @endif
         </section>
+
+        {{-- 7.13-4 / 7.13-5 は未実装（12章 残課題36）。入場とは別の事柄のため節の外に置く。 --}}
+        <p class="mt-4 text-sm text-stone-600">{{ __('front.reservation.complete.entry_pending') }}</p>
 
         {{-- 7.13-6 マイページまたは予約照会画面へのリンク --}}
         <section aria-labelledby="links-heading" class="mt-6">

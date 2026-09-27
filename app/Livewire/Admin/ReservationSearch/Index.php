@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Admin\ReservationSearch;
 
+use App\Enums\CheckInRevocation;
 use App\Enums\ReservationStatus;
 use App\Models\Admin;
 use App\Models\Cinema;
@@ -9,6 +10,8 @@ use App\Models\Reservation;
 use App\Models\Screening;
 use App\Models\User;
 use App\Rules\FullWidthKatakana;
+use App\Services\EntryService;
+use Flux\Flux;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -65,6 +68,14 @@ class Index extends Component
     #[Locked]
     public string $appliedTerm = '';
 
+    // `<flux:modal wire:model.self="showQr">` がクライアント側（ESC・背景クリック）から
+    // 更新するため Locked にしない（A-10 の `showDetail` と同じ）。
+    public bool $showQr = false;
+
+    /** 入場用QRコードを表示する予約（4.8.5 予約検索の要件2）。 */
+    #[Locked]
+    public ?int $qrReservationId = null;
+
     public function updatedSearchBy(): void
     {
         $this->term = '';
@@ -97,6 +108,82 @@ class Index extends Component
     {
         $this->appliedSearchBy = null;
         $this->appliedTerm = '';
+        $this->closeQrCode();
+    }
+
+    /**
+     * 入場用QRコードを開く（4.8.5 予約検索の要件2）。検索結果と同じ可視範囲の制約を通す。
+     */
+    public function showQrCode(int $reservationId): void
+    {
+        Gate::forUser($this->currentAdmin())->authorize('viewAny', Reservation::class);
+
+        // 可視範囲の確認はここで完結させず、`qrReservation()` が描き直しのたびに行う
+        // （A-10 の `showReservations()` と同じ。所属館の変更に追随するため）。
+        abort_if($this->qrTargetQuery($reservationId)->doesntExist(), 404);
+
+        $this->qrReservationId = $reservationId;
+        $this->showQr = true;
+    }
+
+    public function closeQrCode(): void
+    {
+        $this->qrReservationId = null;
+        $this->showQr = false;
+    }
+
+    /**
+     * 入場を取り消す（4.6.5）。`super-admin`（全館）・`cinema-admin`（自館のみ）が実行できる。
+     *
+     * 館の範囲は検索結果と同じ `narrowToVisible()`（`CinemaScope`）で担保する。
+     * 期限（上映回の終了時刻まで）と状態の確認は `EntryService::revokeCheckIn()` が行う。
+     */
+    public function revokeCheckIn(EntryService $entries, int $reservationId): void
+    {
+        Gate::forUser($this->currentAdmin())->authorize('revokeCheckIn', Reservation::class);
+
+        $reservation = $this->narrowToVisible(Reservation::query()->whereKey($reservationId))
+            ->select(['id', 'screening_id'])
+            ->first();
+
+        abort_if($reservation === null, 404);
+
+        $outcome = $entries->revokeCheckIn($reservation);
+
+        Flux::toast(
+            text: __($outcome->messageKey()),
+            variant: $outcome === CheckInRevocation::Revoked ? 'success' : 'danger',
+        );
+    }
+
+    /**
+     * QRコードを示してよい予約。可視範囲の `paid` に限る（キャンセル済みには入場の手段を示さない。7.19-6）。
+     *
+     * @return Builder<Reservation>
+     */
+    private function qrTargetQuery(int $reservationId): Builder
+    {
+        return $this->narrowToVisible(Reservation::query()->whereKey($reservationId))
+            ->where('status', ReservationStatus::Paid)
+            ->whereNotNull('entry_code');
+    }
+
+    /**
+     * モーダルに表示する予約。描き直しのたびに可視範囲から引き直す。
+     */
+    private function qrReservation(): ?Reservation
+    {
+        if (! $this->showQr || $this->qrReservationId === null) {
+            return null;
+        }
+
+        Gate::forUser($this->currentAdmin())->authorize('viewAny', Reservation::class);
+
+        return $this->qrTargetQuery($this->qrReservationId)
+            // 4.8.5-3: メールアドレス・決済情報を扱わないため、必要な列のみ取得する。
+            ->select(['id', 'reservation_no', 'user_id', 'guest_name', 'contact_type', 'entry_code'])
+            ->with('user:id,name')
+            ->first();
     }
 
     /**
@@ -263,7 +350,8 @@ class Index extends Component
             ])
             ->with([
                 'user:id,name',
-                'screening:id,booking_id,starts_at',
+                // `ends_at` は入場の取消の期限（4.6.5）で導線を出し分けるために読む。
+                'screening:id,booking_id,starts_at,ends_at',
                 'screening.booking:id,cinema_id,movie_id',
                 'screening.booking.cinema:id,name',
                 'screening.booking.movie:id,title',
@@ -286,6 +374,8 @@ class Index extends Component
             'searched' => $this->appliedSearchBy !== null,
             'tooMany' => $this->exceededLimit,
             'resultLimit' => self::RESULT_LIMIT,
+            'qrReservation' => $this->qrReservation(),
+            'canRevokeCheckIn' => Gate::forUser($this->currentAdmin())->allows('revokeCheckIn', Reservation::class),
         ])->layout('layouts.admin', ['title' => __('admin.reservation_search.title')]);
     }
 }

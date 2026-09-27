@@ -92,12 +92,20 @@
         <p class="mt-2 text-xs text-stone-600">{{ __('front.lookup.amount_note') }}</p>
     </section>
 
-    {{-- 入場用QRコード（7.19-6）は工程8で加える（12章 残課題18 / 36-a）。
-         キャンセル済みの予約には入場の案内を出さない。 --}}
-    @if (! $isCancelled)
+    {{-- 入場用QRコード（7.19-6）。キャンセル済みの予約には入場の案内を出さない。
+         QRの内容は入場コードの文字列のみ（4.6.2-2）。`entry_code` は `paid` の予約に
+         確定時（`ReservationService::confirm()`）から必ず入るが、念のため null も
+         許容し、その場合は節ごと出さない。 --}}
+    @if (! $isCancelled && $reservation->entry_code !== null)
         <section aria-labelledby="{{ $idPrefix }}-entry-heading" class="mt-4 border border-stone-300 bg-stone-50 p-4">
             <h3 id="{{ $idPrefix }}-entry-heading" class="font-bold">{{ __('front.lookup.entry_heading') }}</h3>
-            <p class="mt-2 text-sm">{{ __('front.lookup.entry_pending') }}</p>
+
+            <div class="mt-3 flex justify-center">
+                <x-entry-qr-code :code="$reservation->entry_code" :alt="__('front.lookup.entry_heading')" />
+            </div>
+
+            <p class="mt-2 text-sm">{{ __('front.lookup.entry_guide') }}</p>
+            <p class="mt-1 text-sm">{{ __('front.lookup.entry_fallback') }}</p>
         </section>
     @endif
 

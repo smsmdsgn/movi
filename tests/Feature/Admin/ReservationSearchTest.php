@@ -9,9 +9,12 @@ use App\Models\ReservationSeat;
 use App\Models\Screening;
 use App\Models\Seat;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Str;
 use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Livewire;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * 検索対象の予約を1件、座席つきで作成する。
@@ -393,3 +396,144 @@ it('gate ロールは予約検索を実行できない（17.1.3）', function ()
 
     Livewire::test(Index::class)->set('searchBy', 'reservation_no')->set('term', '12345678')->call('search');
 })->throws(AuthorizationException::class);
+
+/*
+ * 入場用QRコード（4.8.5 予約検索の要件2 / 4.6.6）と入場の取消（4.6.5）。
+ * 判定そのもの（拒否理由の分岐）は EntryGateTest / EntryServiceTest が担う。
+ */
+
+it('paid の予約のQRコードを開くとモーダルに画像が表示される（4.8.5 予約検索の要件2）', function () {
+    $ctx = makeTodayScreening();
+    $reservation = makeSearchableReservation($ctx, [
+        'reservation_no' => '12345678',
+        'entry_code' => Str::random(32),
+    ]);
+    $this->actingAs(createAdmin(), 'admin');
+
+    Livewire::test(Index::class)
+        ->set('searchBy', 'reservation_no')
+        ->set('term', '12345678')
+        ->call('search')
+        ->call('showQrCode', $reservation->id)
+        ->assertSet('showQr', true)
+        ->assertSee('data:image/png;base64,', escape: false);
+});
+
+it('キャンセル済みの予約のQRコードは開けない（404）', function () {
+    $ctx = makeTodayScreening();
+    $reservation = makeSearchableReservation($ctx, [
+        'status' => ReservationStatus::Cancelled,
+        'entry_code' => Str::random(32),
+    ]);
+    $this->actingAs(createAdmin(), 'admin');
+    $this->withoutExceptionHandling();
+
+    expect(fn () => Livewire::test(Index::class)->call('showQrCode', $reservation->id))
+        ->toThrow(NotFoundHttpException::class);
+});
+
+it('cinema-admin は他館の予約のQRコードを開けない（404 / 17.2.1-3）', function () {
+    $ctx = makeTodayScreening();
+    $reservation = makeSearchableReservation($ctx, ['entry_code' => Str::random(32)]);
+    $otherCinema = createCinema('other-qr', 'ムビ他館');
+    $this->actingAs(createAdmin(AdminRole::CinemaAdmin, $otherCinema), 'admin');
+    $this->withoutExceptionHandling();
+
+    expect(fn () => Livewire::test(Index::class)->call('showQrCode', $reservation->id))
+        ->toThrow(NotFoundHttpException::class);
+});
+
+it('super-admin は入場済みの予約の入場を取り消せる（4.6.5）', function () {
+    $ctx = makeTodayScreening();
+    $ctx['screening']->update(['starts_at' => now()->addHour(), 'ends_at' => now()->addHours(3)]);
+    $reservation = makeSearchableReservation($ctx, ['reservation_no' => '12345678']);
+    $reservation->forceFill(['checked_in_at' => now()])->save();
+    $this->actingAs(createAdmin(), 'admin');
+
+    Livewire::test(Index::class)
+        ->set('searchBy', 'reservation_no')
+        ->set('term', '12345678')
+        ->call('search')
+        ->call('revokeCheckIn', $reservation->id);
+
+    expect($reservation->refresh()->checked_in_at)->toBeNull();
+});
+
+it('cinema-admin は自館の入場済みの予約を取り消せる（4.6.5）', function () {
+    $ctx = makeTodayScreening();
+    $ctx['screening']->update(['starts_at' => now()->addHour(), 'ends_at' => now()->addHours(3)]);
+    $reservation = makeSearchableReservation($ctx);
+    $reservation->forceFill(['checked_in_at' => now()])->save();
+    $admin = createAdmin(AdminRole::CinemaAdmin);
+    $admin->cinema_id = $ctx['screening']->booking->cinema_id;
+    $admin->save();
+    $this->actingAs($admin, 'admin');
+
+    Livewire::test(Index::class)->call('revokeCheckIn', $reservation->id);
+
+    expect($reservation->refresh()->checked_in_at)->toBeNull();
+});
+
+it('cinema-admin は他館の予約の入場を取り消せない（404 / 17.2.1-3）', function () {
+    $ctx = makeTodayScreening();
+    $ctx['screening']->update(['starts_at' => now()->addHour(), 'ends_at' => now()->addHours(3)]);
+    $reservation = makeSearchableReservation($ctx);
+    $reservation->forceFill(['checked_in_at' => now()])->save();
+    $otherCinema = createCinema('other-revoke', 'ムビ他館');
+    $this->actingAs(createAdmin(AdminRole::CinemaAdmin, $otherCinema), 'admin');
+    $this->withoutExceptionHandling();
+
+    expect(fn () => Livewire::test(Index::class)->call('revokeCheckIn', $reservation->id))
+        ->toThrow(NotFoundHttpException::class);
+
+    expect($reservation->refresh()->checked_in_at)->not->toBeNull();
+});
+
+it('gate ロールは入場の取消を実行できない（17.1.3）', function () {
+    $ctx = makeTodayScreening();
+    $reservation = makeSearchableReservation($ctx);
+    $reservation->forceFill(['checked_in_at' => now()])->save();
+    $this->actingAs(createAdmin(AdminRole::Gate), 'admin');
+    $this->withoutExceptionHandling();
+
+    expect(fn () => Livewire::test(Index::class)->call('revokeCheckIn', $reservation->id))
+        ->toThrow(AuthorizationException::class);
+});
+
+it('終了後の入場の取消はトーストのエラーとなり checked_in_at が残る（4.6.5「期限」）', function () {
+    $now = CarbonImmutable::now();
+    $ctx = makeTodayScreening();
+    $ctx['screening']->update(['starts_at' => $now->subHours(3), 'ends_at' => $now->subMinute()]);
+    $reservation = makeSearchableReservation($ctx);
+    $reservation->forceFill(['checked_in_at' => $now->subHour()])->save();
+    $this->actingAs(createAdmin(), 'admin');
+
+    Livewire::test(Index::class)
+        ->call('revokeCheckIn', $reservation->id)
+        ->assertDispatched(
+            'toast-show',
+            fn (string $name, array $params): bool => ($params['slots']['text'] ?? null) === __('admin.reservation_search.revoke.ended')
+                && ($params['dataset']['variant'] ?? null) === 'danger',
+        );
+
+    expect($reservation->refresh()->checked_in_at)->not->toBeNull();
+});
+
+it('入場済みかつ未終了の行にだけ入場取消ボタンが出る（4.6.5）', function () {
+    $ctx = makeTodayScreening();
+    $ctx['screening']->update(['starts_at' => now()->addHour(), 'ends_at' => now()->addHours(3)]);
+    $checkedIn = makeSearchableReservation($ctx, ['reservation_no' => '11111111']);
+    $checkedIn->forceFill(['checked_in_at' => now()])->save();
+
+    $otherCtx = makeTodayScreening();
+    $notCheckedIn = makeSearchableReservation($otherCtx, ['reservation_no' => '22222222']);
+
+    $this->actingAs(createAdmin(), 'admin');
+
+    Livewire::test(Index::class)
+        ->set('searchBy', 'kana')
+        ->set('term', 'ケンサク')
+        ->call('search')
+        ->assertSee('wire:click="revokeCheckIn('.$checkedIn->id.')"', escape: false)
+        ->assertDontSee('wire:click="revokeCheckIn('.$notCheckedIn->id.')"', escape: false);
+});
