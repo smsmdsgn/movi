@@ -12,8 +12,8 @@ use Illuminate\View\View;
  *
  * **館非依存ページ（P-05〜P-20）のため `{slug}` を持たず、館の解決も行わない。**
  * ヘッダー（`x-front.header`）が `CurrentCinemaService` から自前で解決するため、
- * 本文で館名を出す `front.placeholder`（`PagePlaceholderController`）と異なり、
- * ビューへ渡す必要が無い。**照合が済んだ後も現在の館を差し替えない**（4.3.17）。
+ * 本クラスは館をビューへ渡す必要が無い（`ContactController` と同じ分担。工程7-g）。
+ * **照合が済んだ後も現在の館を差し替えない**（4.3.17）。
  */
 class LookupController extends Controller
 {

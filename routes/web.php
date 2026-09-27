@@ -5,6 +5,8 @@ use App\Http\Controllers\Front\AgreementController;
 use App\Http\Controllers\Front\ChainTopController;
 use App\Http\Controllers\Front\CinemaTopController;
 use App\Http\Controllers\Front\ConfirmController;
+use App\Http\Controllers\Front\ContactCompleteController;
+use App\Http\Controllers\Front\ContactController;
 use App\Http\Controllers\Front\CustomerInfoController;
 use App\Http\Controllers\Front\EstablishmentController;
 use App\Http\Controllers\Front\FoodController;
@@ -15,7 +17,6 @@ use App\Http\Controllers\Front\MyPageController;
 use App\Http\Controllers\Front\MyPageReservationController;
 use App\Http\Controllers\Front\NewsController;
 use App\Http\Controllers\Front\NewsDetailController;
-use App\Http\Controllers\Front\PagePlaceholderController;
 use App\Http\Controllers\Front\PaymentController;
 use App\Http\Controllers\Front\PriceController;
 use App\Http\Controllers\Front\ReservationCompleteController;
@@ -52,9 +53,10 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
     | データを要する P-08（料金表）・P-09（フード）・P-20（サイトマップ）のみ
     | invokable コントローラを持ち、それ以外は本文が lang の固定文言のみのため
     | `Route::view()` で直接ビューを返す（クロージャを使わないため route:cache
-    | と両立する。15.3.2）。P-14・P-15（お問い合わせ）は未実装のため、引き続き
-    | PagePlaceholderController が画面IDと現在の館（ヘッダー表示用、
-    | CurrentCinemaService で解決）のみを返す。
+    | と両立する。15.3.2）。P-14・P-15（お問い合わせ）は工程7-gで実装済み
+    | （ContactController・ContactCompleteController ＋ Livewire。ダミー実装。4.9.2）。
+    | これにより館非依存ページ（P-01, P-05〜P-20）がすべて実装済みになったため、
+    | 暫定の `PagePlaceholderController`・`front.placeholder` は削除した（旧12章 残課題8）。
     |
     | P-02（会員登録）・P-03（ログイン）・P-04（パスワード再設定）は対象外。
     | P-03・P-04 は Fortify が既に実ルートとして提供しており、いずれも認証画面
@@ -73,8 +75,8 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
     |
     | P-07（予約照会）は工程5-nで実装済み（LookupController ＋ Livewire。4.3.17 / 7.19）。
     | 館非依存ページだが、館の解決はヘッダーのビューコンポーネントに任せるため
-    | PagePlaceholderController と異なりコントローラでは解決しない。P-08〜P-13・
-    | P-16〜P-20 も同様に、館をコントローラ・ビューで扱わない（工程7-f）。
+    | コントローラでは解決しない。P-08〜P-13・P-16〜P-20・P-14・P-15 も同様に、
+    | 館をコントローラ・ビューで扱わない（工程7-f・7-g）。
     |
     | P-05（マイページ）は工程6-aで実装済み（MyPageController。7.14）。P-06（予約詳細）
     | は工程6-bで実装済み（MyPageReservationController ＋ Livewire。4.5.4 / 7.14）。
@@ -96,8 +98,8 @@ Route::middleware(SkipCinemaScope::class)->group(function (): void {
         Route::view('faq', 'front.pages.faq')->name('faq.index');
         Route::view('recruit', 'front.pages.recruit')->name('recruit.index');
         Route::view('company', 'front.pages.company')->name('company.index');
-        Route::get('contact', PagePlaceholderController::class)->defaults('screenId', 'P-14')->name('contact.index');
-        Route::get('contact/complete', PagePlaceholderController::class)->defaults('screenId', 'P-15')->name('contact.complete');
+        Route::get('contact', ContactController::class)->name('contact.index');
+        Route::get('contact/complete', ContactCompleteController::class)->name('contact.complete');
         Route::view('terms', 'front.pages.terms')->name('terms.index');
         Route::view('privacy', 'front.pages.privacy')->name('privacy.index');
         Route::view('cookie-policy', 'front.pages.cookie-policy')->name('cookie-policy.index');

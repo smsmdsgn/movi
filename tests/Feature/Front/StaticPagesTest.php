@@ -10,14 +10,15 @@ use App\Services\SeatLockService;
  * 各画面が200を返し、title と h1 を正しく出し、旧工程のプレースホルダが出していた
  * 画面ID（P-08 等）をもう表示しないことを確認する。
  */
-it('title・h1を表示し、画面IDは表示しない', function (string $routeName, string $title, string $heading, string $screenId) {
+it('title・h1を表示し、画面IDとクロール制御（robots）は出さない', function (string $routeName, string $title, string $heading, string $screenId) {
     createCinema('gion', '祇園ムビ');
 
     $this->get(route($routeName))
         ->assertOk()
         ->assertSee("<title>{$title}</title>", false)
         ->assertSee($heading)
-        ->assertDontSee($screenId);
+        ->assertDontSee($screenId)
+        ->assertDontSee('name="robots"', false);
 })->with([
     'P-08 料金表・割引サービス' => ['front.prices.index', '料金表・割引サービス｜MOVI', '料金表・割引サービス', 'P-08'],
     'P-09 フード・ドリンクメニュー' => ['front.food.index', 'フード・ドリンクメニュー｜MOVI', 'フード・ドリンクメニュー', 'P-09'],
@@ -25,6 +26,7 @@ it('title・h1を表示し、画面IDは表示しない', function (string $rout
     'P-11 よくある質問' => ['front.faq.index', 'よくある質問｜MOVI', 'よくある質問', 'P-11'],
     'P-12 採用情報' => ['front.recruit.index', '採用情報｜MOVI', '採用情報', 'P-12'],
     'P-13 会社情報' => ['front.company.index', '会社情報｜MOVI', '会社情報', 'P-13'],
+    'P-14 お問い合わせ' => ['front.contact.index', 'お問い合わせ｜MOVI', 'お問い合わせ', 'P-14'],
     'P-16 利用規約' => ['front.terms.index', '利用規約｜MOVI', '利用規約', 'P-16'],
     'P-17 プライバシーポリシー' => ['front.privacy.index', 'プライバシーポリシー｜MOVI', 'プライバシーポリシー', 'P-17'],
     'P-18 Cookieポリシー' => ['front.cookie-policy.index', 'Cookieポリシー｜MOVI', 'Cookieポリシー', 'P-18'],

@@ -1,17 +1,10 @@
 <?php
 
-it('館非依存ページ（7.1.1 P-14・P-15）のルートが画面IDを返す', function (string $routeName, string $screenId, array $parameters) {
-    createCinema('gion', '祇園ムビ');
-
-    $this->get(route($routeName, $parameters))
-        ->assertOk()
-        ->assertSee($screenId);
-})->with([
-    'P-14 お問い合わせ' => ['front.contact.index', 'P-14', []],
-    'P-15 お問い合わせ送信完了' => ['front.contact.complete', 'P-15', []],
-]);
-
 /*
+ * P-14・P-15（お問い合わせ）は工程7-gで実装したため、画面IDを返す対象から外した。
+ * ダミー実装の検証（送信の検証・完了画面の文言・直接アクセス時のリダイレクト等）は
+ * tests/Feature/Front/ContactTest.php で行う（4.9.2）。
+ *
  * P-08〜P-13・P-16〜P-20 は工程7-fで実装したため、本ファイルの対象から外した。
  * 表示内容は tests/Feature/Front/StaticPagesTest.php・PricePageTest.php・
  * TermsPageTest.php・SitemapPageTest.php・FoodPageTest.php で検証する（4.9.1）。
