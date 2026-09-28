@@ -49,6 +49,28 @@ test('password can be updated', function () {
     expect(Hash::check('new-password', $user->refresh()->password))->toBeTrue();
 });
 
+test('password that looks like a bcrypt hash is hashed before saving', function () {
+    // 旧12章 残課題20。`hashed` キャストはハッシュ済みに見える値をそのまま保存する。
+    $looksHashed = Hash::make('any-seed-password');
+    $user = User::factory()->create([
+        'password' => Hash::make('password'),
+    ]);
+
+    $this->actingAs($user);
+
+    Livewire::test('pages::settings.security')
+        ->set('current_password', 'password')
+        ->set('password', $looksHashed)
+        ->set('password_confirmation', $looksHashed)
+        ->call('updatePassword')
+        ->assertHasNoErrors();
+
+    $stored = $user->refresh()->password;
+
+    expect($stored)->not->toBe($looksHashed)
+        ->and(Hash::check($looksHashed, $stored))->toBeTrue();
+});
+
 test('correct password must be provided to update password', function () {
     $user = User::factory()->create([
         'password' => Hash::make('password'),

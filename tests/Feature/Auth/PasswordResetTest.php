@@ -2,6 +2,7 @@
 
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Fortify\Features;
 
@@ -62,4 +63,30 @@ test('password can be reset with valid token', function () {
 
         return true;
     });
+});
+
+test('reset password that looks like a bcrypt hash is hashed before saving', function () {
+    // 旧12章 残課題20。`hashed` キャストはハッシュ済みに見える値をそのまま保存する。
+    Notification::fake();
+
+    $looksHashed = Hash::make('any-seed-password');
+    $user = User::factory()->create();
+
+    $this->post(route('password.request'), ['email' => $user->email]);
+
+    Notification::assertSentTo($user, ResetPassword::class, function ($notification) use ($user, $looksHashed) {
+        $this->post(route('password.update'), [
+            'token' => $notification->token,
+            'email' => $user->email,
+            'password' => $looksHashed,
+            'password_confirmation' => $looksHashed,
+        ])->assertSessionHasNoErrors();
+
+        return true;
+    });
+
+    $stored = $user->refresh()->password;
+
+    expect($stored)->not->toBe($looksHashed)
+        ->and(Hash::check($looksHashed, $stored))->toBeTrue();
 });

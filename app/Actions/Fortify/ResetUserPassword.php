@@ -4,6 +4,7 @@ namespace App\Actions\Fortify;
 
 use App\Concerns\PasswordValidationRules;
 use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Fortify\Contracts\ResetsUserPasswords;
 
@@ -22,8 +23,10 @@ class ResetUserPassword implements ResetsUserPasswords
             'password' => $this->passwordRules(),
         ])->validate();
 
+        // ハッシュ化してから代入する。`hashed` キャストはハッシュ済みに見える入力
+        // （bcrypt 形式の文字列）をそのまま保存するため（旧12章 残課題20）。
         $user->forceFill([
-            'password' => $input['password'],
+            'password' => Hash::make($input['password']),
         ])->save();
     }
 }

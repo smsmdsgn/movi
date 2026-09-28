@@ -39,6 +39,37 @@ it('super-admin が管理者を新規発行できる（4.8.4）', function () {
         ->and(Hash::check('correct-horse-battery', $created->password))->toBeTrue();
 });
 
+it('bcrypt 形式に見える文字列をパスワードにしても、発行・再設定とも平文のまま保存しない（旧12章 残課題20）', function () {
+    // `hashed` キャストはハッシュ済みに見える値を再ハッシュせずに保存する。保存側で
+    // ハッシュ化しないと、この入力が平文のまま格納されて当該管理者がログインできなくなる。
+    $looksHashed = Hash::make('any-seed-password');
+    $cinema = createCinema('gion', '祇園ムビ');
+    $target = createAdmin(AdminRole::CinemaAdmin, $cinema);
+    $this->actingAs(createAdmin(), 'admin');
+
+    Livewire::test(Index::class)
+        ->call('create')
+        ->set(validAccountForm([
+            'cinema_id' => (string) $cinema->id,
+            'password' => $looksHashed,
+            'password_confirmation' => $looksHashed,
+        ]))
+        ->call('save')
+        ->assertHasNoErrors();
+
+    Livewire::test(Index::class)
+        ->call('edit', $target->id)
+        ->set('password', $looksHashed)
+        ->set('password_confirmation', $looksHashed)
+        ->call('save')
+        ->assertHasNoErrors();
+
+    foreach ([Admin::where('login_id', 'gion-admin')->sole(), $target->refresh()] as $admin) {
+        expect($admin->password)->not->toBe($looksHashed)
+            ->and(Hash::check($looksHashed, $admin->password))->toBeTrue();
+    }
+});
+
 it('cinema-admin・gate には所属館が必須（4.8.6 CinemaScope の403を作らない）', function (AdminRole $role) {
     createCinema('gion', '祇園ムビ');
     $this->actingAs(createAdmin(), 'admin');

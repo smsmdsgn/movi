@@ -10,6 +10,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
@@ -98,7 +99,9 @@ class Index extends Component
 
             Admin::create([
                 'login_id' => $data['login_id'],
-                'password' => $data['password'],
+                // ハッシュ化してから渡す。`hashed` キャストはハッシュ済みに見える入力を
+                // そのまま保存するため（旧12章 残課題20。A-15 と同じ扱い）。
+                'password' => Hash::make($data['password']),
                 'name' => $data['name'],
                 'role' => AdminRole::from($data['role']),
                 'cinema_id' => $this->cinemaIdValue(),
@@ -122,7 +125,7 @@ class Index extends Component
 
             // 空欄はパスワードの据え置きを意味する（4.8.4-5 の再設定は任意の操作）。
             if ($this->isSettingPassword()) {
-                $attributes['password'] = $this->password;
+                $attributes['password'] = Hash::make($data['password']);
             }
 
             $account->update($attributes);

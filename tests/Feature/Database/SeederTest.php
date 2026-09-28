@@ -64,6 +64,18 @@ test('the super-admin password comes from the configured value when present', fu
     expect(Hash::check('a-known-dev-password', $admin->password))->toBeTrue();
 });
 
+test('a configured super-admin password that looks like a bcrypt hash is hashed before saving', function () {
+    // 旧12章 残課題20。`hashed` キャストはハッシュ済みに見える値をそのまま保存する。
+    $looksHashed = Hash::make('any-seed-password');
+    Config::set('services.seed.super_admin_password', $looksHashed);
+
+    Artisan::call('db:seed', ['--class' => MasterDataSeeder::class, '--force' => true]);
+
+    $admin = Admin::where('login_id', SeedConfig::SUPER_ADMIN_LOGIN_ID)->firstOrFail();
+    expect($admin->password)->not->toBe($looksHashed)
+        ->and(Hash::check($looksHashed, $admin->password))->toBeTrue();
+});
+
 test('the super-admin password is randomly generated when the configured value is blank', function () {
     Config::set('services.seed.super_admin_password', '');
 

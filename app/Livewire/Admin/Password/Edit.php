@@ -7,6 +7,7 @@ use Flux\Flux;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Livewire\Component;
@@ -47,8 +48,11 @@ class Edit extends Component
             throw $e;
         }
 
-        // `password` は `hashed` キャストを持つため、平文を代入してモデル経由で保存する（5.5）。
-        $admin->update(['password' => $data['password']]);
+        // **ハッシュ化してから代入する。** `hashed` キャストはハッシュ済みに見える値
+        // （bcrypt 形式の文字列）を再ハッシュせずそのまま保存するため、平文を任せると
+        // そうした入力が平文のまま格納され、ログインできなくなる（旧12章 残課題20）。
+        // 単独の super-admin が踏むと復旧できない（4.8.4-4 / 12章 残課題16）。
+        $admin->update(['password' => Hash::make($data['password'])]);
 
         $this->reset(['current_password', 'password', 'password_confirmation']);
 

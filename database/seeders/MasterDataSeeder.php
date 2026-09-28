@@ -9,6 +9,7 @@ use App\Models\PostCategory;
 use App\Models\SeatType;
 use App\Models\TicketType;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 /**
@@ -55,7 +56,11 @@ class MasterDataSeeder extends Seeder
 
             Admin::create([
                 'login_id' => SeedConfig::SUPER_ADMIN_LOGIN_ID,
-                'password' => $password,
+                // ハッシュ化してから渡す。`hashed` キャストはハッシュ済みに見える値を
+                // そのまま保存し、設定より高い cost の値では例外で止まる（4.8.6追記表
+                // 「パスワードの保存」/ 旧12章 残課題20）。初期の super-admin は単独のため、
+                // 誤って平文で保存されると復旧できない（12章 残課題16）。
+                'password' => Hash::make($password),
                 'name' => SeedConfig::SUPER_ADMIN_NAME,
                 'role' => AdminRole::SuperAdmin,
                 'cinema_id' => null,
