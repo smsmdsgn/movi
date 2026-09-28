@@ -168,7 +168,7 @@ it('お支払い前・期限切れの予約は対象外とする（4.5.3「対�
     'expired' => [ReservationStatus::Expired],
 ]);
 
-it('キャンセル済みには上映回の情報が変更されうる旨を注記する（12章 残課題37・40）', function () {
+it('キャンセル済みには上映回の情報が変更されうる旨を注記する（12章 残課題37 / 旧12章 残課題40）', function () {
     createCinema('gion', '祇園ムビ');
     $user = User::factory()->create();
     ['reservation' => $reservation] = detailReservation($user, status: ReservationStatus::Cancelled);

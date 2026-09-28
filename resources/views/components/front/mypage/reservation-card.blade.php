@@ -47,7 +47,7 @@
     </dl>
 
     @if ($isCancelled)
-        {{-- 12章 残課題37・40。キャンセル済みだけが残る上映回は A-09 がシアター・開始時刻を
+        {{-- 12章 残課題37 / 旧12章 残課題40。キャンセル済みだけが残る上映回は A-09 がシアター・開始時刻を
              変更できるため、ここに出る劇場名・上映日時は現在値であり予約時点とは限らない
              （P-07 の `front.lookup.cancelled_note` と同じ手当て。4.3.17）。 --}}
         <p class="mt-2 border border-stone-300 bg-stone-50 p-2 text-xs">{{ __('front.lookup.cancelled_note') }}</p>

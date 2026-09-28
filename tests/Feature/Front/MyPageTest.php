@@ -318,7 +318,7 @@ it('ページネーションを日本語かつ規約どおりの意匠で描く�
         ->assertDontSee('sm:hidden', escape: false);
 });
 
-it('履歴のキャンセル済みに上映回が変わりうる旨の注記を出す（12章 残課題37・40）', function () {
+it('履歴のキャンセル済みに上映回が変わりうる旨の注記を出す（12章 残課題37 / 旧12章 残課題40）', function () {
     $user = User::factory()->create();
 
     mypageReservation($user, startsAt: CarbonImmutable::now()->addDays(3), status: ReservationStatus::Cancelled);

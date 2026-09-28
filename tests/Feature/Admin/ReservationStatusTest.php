@@ -31,7 +31,9 @@ it('予約明細に 予約者名・座席・券種・入場状態 を表示す�
         ->assertSee('予約 太郎')
         ->assertSee($ctx['seat']->displayName())
         ->assertSee('大人')
-        ->assertSee(__('admin.reservation.state.not_checked_in'));
+        ->assertSee(__('admin.reservation.state.not_checked_in'))
+        // キャンセル済みを含まない明細では注記を出さない（4.3.17 / 旧12章 残課題40）。
+        ->assertDontSee(__('admin.common.cancelled_reservation_note'));
 });
 
 it('予約明細にメールアドレス・電話番号・金額を表示しない（4.8.5）', function () {
@@ -108,7 +110,23 @@ it('キャンセル済みの予約は座席・券種つきで明細に残る（6
         ->assertSee(__('admin.reservation.state.cancelled'))
         // 窓口での照合に必要なため、解放済みでも座席・券種を落とさない（4.8.5）。
         ->assertSee($ctx['seat']->displayName())
-        ->assertSee('大人');
+        ->assertSee('大人')
+        // 上映回がキャンセル後に変更されうる旨の注記（4.3.17 / 旧12章 残課題40）。
+        ->assertSee(__('admin.common.cancelled_reservation_note'));
+});
+
+it('有効な予約とキャンセル済みが混在する明細では、表の上にキャンセル済みの注記を出す（4.3.17 / 旧12章 残課題40）', function () {
+    $ctx = makeTodayScreening();
+    // キャンセル済みは座席を解放済み（released_at）のため、同じ座席の有効な予約と共存できる（6.4.2）。
+    makeSeatedReservation($ctx, ['status' => ReservationStatus::Cancelled], releaseSeats: true);
+    makeSeatedReservation($ctx, ['status' => ReservationStatus::Paid]);
+    $this->actingAs(createAdmin(), 'admin');
+
+    Livewire::test(Index::class)
+        ->call('showReservations', $ctx['screening']->id)
+        ->assertSee(__('admin.reservation.state.cancelled'))
+        ->assertSee(__('admin.reservation.state.not_checked_in'))
+        ->assertSee(__('admin.common.cancelled_reservation_note'));
 });
 
 it('キャンセル済みの座席は一覧の予約席数に数えない（6.4.2 の占有の定義）', function () {

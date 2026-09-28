@@ -82,6 +82,12 @@
             @if ($reservations->isEmpty())
                 <flux:text>{{ __('admin.reservation.notices.no_reservations') }}</flux:text>
             @else
+                {{-- キャンセル済みの予約は座席をキャンセル時点のまま残すため、上映回の編集後は
+                     食い違って見えうる（4.3.17 / 旧12章 残課題40）。 --}}
+                @if ($reservations->contains(fn ($reservation) => $reservation->status === \App\Enums\ReservationStatus::Cancelled))
+                    <flux:callout variant="warning" :text="__('admin.common.cancelled_reservation_note')" />
+                @endif
+
                 <flux:table>
                     <flux:table.columns>
                         <flux:table.column>{{ __('admin.reservation.fields.reservation_no') }}</flux:table.column>

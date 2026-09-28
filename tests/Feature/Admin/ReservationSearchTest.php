@@ -50,7 +50,9 @@ it('予約番号で検索できる。ハイフンの有無を問わない（4.3.
         ->call('search')
         ->assertHasNoErrors()
         ->assertSee('1234-5678')
-        ->assertSee('検索 太郎');
+        ->assertSee('検索 太郎')
+        // キャンセル済みを含まない検索結果では注記を出さない（4.3.17 / 旧12章 残課題40）。
+        ->assertDontSee(__('admin.common.cancelled_reservation_note'));
 })->with([
     'ハイフンなし' => ['12345678'],
     'ハイフンあり' => ['1234-5678'],
@@ -204,7 +206,29 @@ it('キャンセル済みの予約も検索結果に出る（窓口での照合�
         ->set('searchBy', 'reservation_no')
         ->set('term', '12345678')
         ->call('search')
-        ->assertSee(__('admin.reservation_search.state.cancelled'));
+        ->assertSee(__('admin.reservation_search.state.cancelled'))
+        // 上映回がキャンセル後に変更されうる旨の注記（4.3.17 / 旧12章 残課題40）。
+        ->assertSee(__('admin.common.cancelled_reservation_note'));
+});
+
+it('有効な予約とキャンセル済みが混在する検索結果では、表の上にキャンセル済みの注記を出す（4.3.17 / 旧12章 残課題40）', function () {
+    $ctx = makeTodayScreening();
+    // キャンセル済みは座席を解放済み（released_at）のため、同じ座席の有効な予約と共存できる（6.4.2）。
+    makeSeatedReservation($ctx, [
+        'guest_name' => '検索 太郎',
+        'guest_name_kana' => 'ケンサク タロウ',
+        'status' => ReservationStatus::Cancelled,
+    ], releaseSeats: true);
+    makeSearchableReservation($ctx);
+    $this->actingAs(createAdmin(), 'admin');
+
+    Livewire::test(Index::class)
+        ->set('searchBy', 'kana')
+        ->set('term', 'ケンサク')
+        ->call('search')
+        ->assertSee(__('admin.reservation_search.state.cancelled'))
+        ->assertSee(__('admin.reservation_search.state.not_checked_in'))
+        ->assertSee(__('admin.common.cancelled_reservation_note'));
 });
 
 it('pending と expired の予約は検索結果に出ない', function (ReservationStatus $status) {
