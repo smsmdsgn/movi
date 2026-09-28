@@ -45,7 +45,7 @@
 @endphp
 <x-front.layout
     :title="__('front.cinema_top.title', ['cinema' => $cinema->name])"
-    :description="\Illuminate\Support\Str::limit(__('front.cinema_top.description', ['cinema' => $cinema->name, 'address' => $cinema->address, 'concept' => $cinema->concept]), 120, '')"
+    :description="__('front.cinema_top.description', ['cinema' => $cinema->name, 'address' => $cinema->address, 'concept' => $cinema->concept])"
     :canonical="$canonicalUrl"
     :jsonLd="$jsonLd"
 >

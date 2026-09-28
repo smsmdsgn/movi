@@ -3,7 +3,8 @@
 
     メタ情報（19.2 / 19.3）は各画面が props で渡す。
     - title: 19.2 の形式で各画面が組み立てる
-    - description: 120文字程度の要約。館ごとのページでは館名と所在地を含める
+    - description: 120文字程度の要約。120文字を超える分はレイアウトが文字数で切り詰める
+      （19.2。各画面は切り詰めずに渡す）。館ごとのページでは館名と所在地を含める
     - canonical: 正規URL。省略時は現在のURL
     - ogImage: OGP画像。作品のポスター等。サイト共通の画像は未用意（12章 残課題）
     - ogType: `website`（既定）または `article` 等
@@ -25,8 +26,17 @@
     'jsonLd' => [],
 ])
 @php
+    // meta description の上限（19.2）。Str::limit() は表示幅（mb_strwidth）で数えるため
+    // 使わず、文字数（mb_strlen と同じ数え方）の Str::substr() で切り詰める（旧12章 残課題46）。
+    // 切り詰める前に改行・連続する空白を1つにまとめ（あらすじ等は改行を含む）、切り詰めた後も
+    // 末尾の空白を落とす（Str::limit() の rtrim と同じ）。
+    $descriptionLimit = 120;
     $pageTitle = $title ?? config('app.name', 'MOVI');
-    $pageDescription = $description ?? __('front.meta.default_description');
+    $pageDescription = rtrim(\Illuminate\Support\Str::substr(
+        \Illuminate\Support\Str::squish($description ?? __('front.meta.default_description')),
+        0,
+        $descriptionLimit,
+    ));
     $canonicalUrl = $canonical ?? url()->current();
     $cookieConsent = \App\Enums\CookieConsent::fromRequest(request());
 @endphp

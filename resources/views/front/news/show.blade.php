@@ -48,7 +48,7 @@
 @endphp
 <x-front.layout
     :title="__('front.news.detail.title', ['title' => $post->title, 'cinema' => $cinema->name])"
-    :description="\Illuminate\Support\Str::limit(__('front.news.detail.description', ['cinema' => $cinema->name, 'address' => $cinema->address, 'excerpt' => $excerpt]), 120, '')"
+    :description="__('front.news.detail.description', ['cinema' => $cinema->name, 'address' => $cinema->address, 'excerpt' => $excerpt])"
     :canonical="$canonicalUrl"
     ogType="article"
     :jsonLd="$jsonLd"

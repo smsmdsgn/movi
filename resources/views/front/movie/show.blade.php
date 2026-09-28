@@ -66,7 +66,7 @@
 @endphp
 <x-front.layout
     :title="__('front.movie.title', ['movie' => $movie->title, 'cinema' => $cinema->name])"
-    :description="\Illuminate\Support\Str::limit(__('front.movie.description', ['cinema' => $cinema->name, 'address' => $cinema->address, 'movie' => $movie->title, 'synopsis' => $movie->synopsis]), 120, '')"
+    :description="__('front.movie.description', ['cinema' => $cinema->name, 'address' => $cinema->address, 'movie' => $movie->title, 'synopsis' => $movie->synopsis])"
     :canonical="$canonicalUrl"
     :ogImage="$posterUrl"
     ogType="video.movie"

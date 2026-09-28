@@ -19,12 +19,12 @@
 @endphp
 <x-front.layout
     :title="__('front.reservation.title', ['movie' => $screening->booking->movie->title, 'cinema' => $cinema->name])"
-    :description="\Illuminate\Support\Str::limit(__('front.reservation.description', [
+    :description="__('front.reservation.description', [
         'cinema' => $cinema->name,
         'theater' => $screening->theater->name,
         'datetime' => $datetime,
         'movie' => $screening->booking->movie->title,
-    ]), 120, '')"
+    ])"
     robots="noindex, nofollow"
 >
     <div class="mx-auto max-w-5xl px-4 py-6">

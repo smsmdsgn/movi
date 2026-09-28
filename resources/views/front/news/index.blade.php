@@ -51,7 +51,7 @@
 @endphp
 <x-front.layout
     :title="$pageTitle"
-    :description="\Illuminate\Support\Str::limit($pageDescription, 120, '')"
+    :description="$pageDescription"
     :canonical="$canonicalUrl"
     :jsonLd="$jsonLd"
 >

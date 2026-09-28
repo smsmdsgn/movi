@@ -159,6 +159,28 @@ it('hasTmdbPage()が偽の場合はTMDBリンクを表示しない', function ()
         ->assertDontSee('themoviedb.org');
 });
 
+it('あらすじが長い場合、meta description は改行をまとめたうえで表示幅ではなく文字数で120文字に切り詰められ、og:description も同じ値になる（19.2）', function () {
+    // 全角200文字余り。Str::limit()（mb_strwidth）で切り詰めると全角は約60文字で切れてしまう
+    // （旧12章 残課題46）。文字数（mb_strlen）で数えると120文字ちょうどになる。
+    $fixture = makeMovieDetailFixture(['synopsis' => "あらすじの1行目\n".str_repeat('あ', 200)]);
+    $cinema = $fixture['cinema'];
+    $movie = $fixture['movie'];
+
+    $html = $this->get(route('front.movie.show', ['slug' => $cinema->slug, 'id' => $movie->id]))
+        ->assertOk()
+        ->getContent();
+
+    expect(preg_match('/<meta name="description" content="(.*?)">/s', $html, $meta))->toBe(1)
+        ->and(preg_match('/<meta property="og:description" content="(.*?)">/s', $html, $og))->toBe(1);
+
+    $description = html_entity_decode($meta[1]);
+
+    expect(mb_strlen($description))->toBe(120)
+        ->and($description)->not->toContain("\n")
+        ->and($description)->toContain('あらすじの1行目 あ')
+        ->and(html_entity_decode($og[1]))->toBe($description);
+});
+
 it('titleが「{作品名}｜{館名}｜MOVI」で、MovieのJSON-LDとog:imageを含む', function () {
     $fixture = makeMovieDetailFixture(['title' => 'サンプル作品', 'poster_path' => '/sample-poster.jpg']);
     $cinema = $fixture['cinema'];
