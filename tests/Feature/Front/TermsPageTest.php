@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Screening;
 use App\Models\User;
 
 /*
@@ -17,11 +18,12 @@ it('id="online-ticket"の条項に同意画面と同じ文言と4.4の条件を�
 
     expect($html)->toContain('id="online-ticket"');
     expect($html)->toContain(__('front.reservation.agreement.terms.no_change'));
-    expect($html)->toContain(__('front.reservation.agreement.terms.cancel_deadline'));
+    expect($html)->toContain(__('front.reservation.agreement.terms.cancel_deadline', ['minutes' => Screening::CANCEL_DEADLINE_MINUTES]));
     expect($html)->toContain(__('front.reservation.agreement.terms.late_entry'));
     expect($html)->toContain(__('front.pages.terms.no_fee_full_refund'));
     expect($html)->toContain(__('front.pages.terms.no_partial_cancel'));
     expect($html)->toContain(__('front.pages.terms.no_cancel_after_checkin'));
+    expect($html)->not->toContain(':minutes');
 });
 
 it('同意画面の「利用規約の全文を読む」リンク先は#online-ticket付きの利用規約ページである', function () {

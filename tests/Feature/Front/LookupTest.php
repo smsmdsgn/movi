@@ -484,6 +484,8 @@ it('キャンセルは確認を1段挟んでから実行する（4.3.18）', fun
 
     $component = lookupByNumber($reservation->reservation_no)
         ->assertSee(__('front.cancel.start'))
+        ->assertSee(__('front.cancel.lead', ['minutes' => Screening::CANCEL_DEADLINE_MINUTES]))
+        ->assertDontSee(':minutes')
         // 確認を出す前に実行しても何も起きない。
         ->call('cancel')
         ->assertDontSee(__('front.cancel.done_heading'));
@@ -528,7 +530,8 @@ it('期限を過ぎた予約にはキャンセルの導線を出さない（4.4-
     ['reservation' => $reservation] = lookupReservation(startsAt: CarbonImmutable::now()->addMinutes(10));
 
     lookupByNumber($reservation->reservation_no)
-        ->assertSee(__('front.cancel.unavailable.deadline'))
+        ->assertSee(__('front.cancel.unavailable.deadline', ['minutes' => Screening::CANCEL_DEADLINE_MINUTES]))
+        ->assertDontSee(':minutes')
         ->assertDontSee(__('front.cancel.start'));
 });
 
@@ -582,7 +585,7 @@ it('画面に導線が出ていても、実行時に期限を過ぎていれば�
     CarbonImmutable::setTestNow($startsAt->subMinutes(5));
 
     $component->call('cancel')
-        ->assertSee(__('front.cancel.errors.deadline_passed'))
+        ->assertSee(__('front.cancel.errors.deadline_passed', ['minutes' => Screening::CANCEL_DEADLINE_MINUTES]))
         ->assertDontSee(__('front.cancel.done_heading'));
 
     expect($reservation->refresh()->status)->toBe(ReservationStatus::Paid);

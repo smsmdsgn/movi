@@ -8,6 +8,7 @@
     - $cancelError: キャンセルを承れなかった理由の文言キー（無ければ null）
     - $refundPending: キャンセルは成立したが返金が未了か（見出しと配色を分ける）
     - $cancelState: キャンセルの導線（4.4 / 7.19-8）。{available, noticeKey}、出さない場合は null
+    - $cancelDeadlineMinutes: キャンセル期限（上映開始の何分前まで）。文言の `:minutes` へ差し込む（4.9.5）
 
     明細（7.14「入場用QRコード、予約内容、領収書」）とキャンセルの節は
     `x-front.reservation.detail` / `x-front.reservation.cancel-section` が描く
@@ -25,9 +26,11 @@
     {{-- ライブリージョンはルート直下に常設し、中身だけを差し替える（P-07 と同じ扱い）。 --}}
     <div role="alert" aria-live="assertive" class="empty:hidden">
         @if ($cancelError !== null)
-            {{-- キャンセルを承れなかった理由（4.4）。課金にも座席にも触れていない。 --}}
+            {{-- キャンセルを承れなかった理由（4.4）。課金にも座席にも触れていない。
+                 `deadline_passed` のみ `:minutes` を含む（4.9.5）。他の文言は未使用の
+                 置換引数を無視するため、呼び分けを設けない（A-16 の入場ゲートと同じ扱い）。 --}}
             <p class="mb-4 border border-red-700 bg-red-50 p-3 text-sm text-red-900">
-                {{ __($cancelError) }}
+                {{ __($cancelError, ['minutes' => $cancelDeadlineMinutes]) }}
             </p>
         @endif
     </div>
@@ -39,6 +42,7 @@
         :confirming-cancel="$confirmingCancel"
         :cancelled-notice="$cancelledNotice"
         :refund-pending="$refundPending"
+        :cancel-deadline-minutes="$cancelDeadlineMinutes"
         id-prefix="mypage-reservation"
     />
 

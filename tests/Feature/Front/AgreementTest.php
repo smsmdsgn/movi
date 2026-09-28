@@ -1,6 +1,7 @@
 <?php
 
 use App\Livewire\Front\Reservation\Agreement;
+use App\Models\Screening;
 use App\Models\SeatLock;
 use App\Models\User;
 use App\Services\ReservationDraft;
@@ -27,9 +28,13 @@ it('同意画面が上映情報・選択中の座席・利用規約の要約を�
         ->assertSee($theater->cinema->name)
         ->assertSee($seats[0]->displayName())
         ->assertSee(__('front.reservation.agreement.terms.no_change'))
-        ->assertSee(__('front.reservation.agreement.terms.cancel_deadline'))
+        ->assertSee(__('front.reservation.agreement.terms.cancel_deadline', ['minutes' => Screening::CANCEL_DEADLINE_MINUTES]))
+        // 期待値を `__()` から作るだけでは、言語ファイルが分数の直書きに戻っても通ってしまう。
+        // 定数の値が画面まで届いていることを数字で直接確かめる（4.9.5。旧12章 残課題47）。
+        ->assertSee('上映開始の'.Screening::CANCEL_DEADLINE_MINUTES.'分前まで')
         ->assertSee(__('front.reservation.agreement.terms.late_entry'))
         ->assertSee(route('front.terms.index'))
+        ->assertDontSee(':minutes')
         ->assertSee('name="robots" content="noindex, nofollow"', escape: false);
 });
 

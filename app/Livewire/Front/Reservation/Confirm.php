@@ -196,6 +196,8 @@ class Confirm extends Component
             'seats' => $canProceed ? $this->heldSeats() : new EloquentCollection,
             'ticketTypes' => $this->ticketTypes(),
             'purchaser' => $this->purchaserDisplay(),
+            // 変更不可・キャンセル期限の注記（no_change_note）へ差し込む値（4.9.5）。
+            'cancelDeadlineMinutes' => Screening::CANCEL_DEADLINE_MINUTES,
             // 7.12-5 座席ロックの残り時間。期限そのものを渡し、表示はブラウザが刻む。
             'holdExpiresAt' => $canProceed ? $this->holdExpiresAt($locks) : null,
             'publishableKey' => app(StripeService::class)->publishableKey(),

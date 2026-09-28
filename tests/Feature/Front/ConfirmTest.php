@@ -67,6 +67,9 @@ it('座席と券種・金額の内訳・お客様情報・確保期限・確定�
         ->assertSee('guest@example.test')
         // 7.12-5 座席ロックの残り時間
         ->assertSee(__('front.reservation.confirm.hold_heading'))
+        // キャンセル期限は定数から差し込む（4.9.5 / 旧12章 残課題47）
+        ->assertSee(__('front.reservation.confirm.no_change_note', ['minutes' => Screening::CANCEL_DEADLINE_MINUTES]))
+        ->assertDontSee(':minutes')
         // 7.12-6 確定ボタン
         ->assertSee(__('front.reservation.confirm.submit'));
 });

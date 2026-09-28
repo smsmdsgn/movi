@@ -7,6 +7,8 @@
     - $noticeKey: 表示する案内の文言キー（7.17）。無い場合は null
     - $maxSeats: 1度に選択できる座席数の上限。P-32 が現在出す文言に `:max` は無いが、
       P-31 と同じ形で渡す（7.17 の文言を増やしたときの置換漏れを防ぐ）
+    - $cancelDeadlineMinutes: キャンセル期限（上映開始の何分前まで）。規約の要約の
+      `:minutes` へ差し込む（4.9.5）
     - $seatsUrl: 座席選択（P-31）のURL
     - $termsUrl: 利用規約の全文（P-16、4.3.7-6）
 
@@ -55,7 +57,7 @@
             <p class="mt-2 text-sm text-stone-600">{{ __('front.reservation.agreement.terms_note') }}</p>
 
             <ul class="mt-3 space-y-2 text-sm">
-                @foreach (__('front.reservation.agreement.terms') as $term)
+                @foreach (__('front.reservation.agreement.terms', ['minutes' => $cancelDeadlineMinutes]) as $term)
                     <li class="flex gap-2">
                         <span aria-hidden="true" class="text-brand">●</span>
                         <span>{{ $term }}</span>

@@ -5,6 +5,7 @@ namespace App\Livewire\Front\Concerns;
 use App\Enums\CancellationOutcome;
 use App\Enums\ReservationStatus;
 use App\Models\Reservation;
+use App\Models\Screening;
 use App\Services\ReservationService;
 use Illuminate\Support\Facades\Date;
 use Livewire\Attributes\Locked;
@@ -162,7 +163,11 @@ trait CancelsReservation
      * ここで絞った値が生のプロパティで置き換わり、**絞り込みが黙って無効になる。**
      * 返金未了の別を `refundPending` という別名で渡すのはこのためである。
      *
-     * @return array{cancelState: array{available: bool, noticeKey: string|null}|null, confirmingCancel: bool, cancelledNotice: string|null, cancelError: string|null, refundPending: bool}
+     * **文言へ差し込むキャンセル期限もここから渡す**（`cancelDeadlineMinutes`、4.9.5）。
+     * 案内・拒否の理由の文言キーはサービスとトレイトが決め、画面はそれを `__()` するだけの
+     * ため、置換値も同じ所から渡せば、画面が増えても渡し忘れない。
+     *
+     * @return array{cancelState: array{available: bool, noticeKey: string|null}|null, confirmingCancel: bool, cancelledNotice: string|null, cancelError: string|null, refundPending: bool, cancelDeadlineMinutes: int}
      */
     protected function cancelViewData(?Reservation $reservation): array
     {
@@ -176,6 +181,7 @@ trait CancelsReservation
             'cancelledNotice' => $holdsResult ? $this->cancelNoticeKey : null,
             'cancelError' => $holdsResult ? $this->cancelErrorKey : null,
             'refundPending' => $holdsResult && $this->cancelRefundPending,
+            'cancelDeadlineMinutes' => Screening::CANCEL_DEADLINE_MINUTES,
         ];
     }
 

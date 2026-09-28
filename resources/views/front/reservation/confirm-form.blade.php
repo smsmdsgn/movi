@@ -7,6 +7,7 @@
     - $seats: 保持中の座席（座席表と同じ並び順）
     - $ticketTypes: 券種マスタ（券種名の表示に使う）
     - $purchaser: 購入者情報（name / email / phone）
+    - $cancelDeadlineMinutes: キャンセル期限（上映開始の何分前まで）。注記の `:minutes` へ差し込む（4.9.5）
     - $holdExpiresAt: 座席ロックの期限（7.12-5）。表示はブラウザが刻む
     - $publishableKey: Stripe の公開可能キー（追加認証に使う）
     - $seatsLost: 返金を伴う失敗（8.2）。座席選択からやり直す
@@ -188,7 +189,7 @@
             </dl>
         </section>
 
-        <p class="mt-4 text-xs text-stone-600">{{ __('front.reservation.confirm.no_change_note') }}</p>
+        <p class="mt-4 text-xs text-stone-600">{{ __('front.reservation.confirm.no_change_note', ['minutes' => $cancelDeadlineMinutes]) }}</p>
 
         <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
             <a href="{{ $paymentUrl }}" class="border border-stone-400 px-4 py-3 text-sm underline decoration-stone-400 hover:bg-stone-100">

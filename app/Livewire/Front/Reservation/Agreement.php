@@ -94,6 +94,8 @@ class Agreement extends Component
             // 読み上げられない実装がある。P-31 のビューと同じ扱い）。
             'noticeKey' => $this->noticeKey($screening !== null, $seats->isNotEmpty(), $locks),
             'maxSeats' => SeatLockService::MAX_SEATS_PER_HOLDER,
+            // 規約の要約（cancel_deadline）へ差し込むキャンセル期限（4.9.5）。
+            'cancelDeadlineMinutes' => Screening::CANCEL_DEADLINE_MINUTES,
             'seatsUrl' => route('front.reservation.seats', ['id' => $this->screeningId]),
             // オンラインチケット購入の条項へ直接遷移させる（P-16、4.3.7-6）。
             'termsUrl' => route('front.terms.index').'#online-ticket',

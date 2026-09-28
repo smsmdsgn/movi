@@ -271,7 +271,8 @@ it('期限を過ぎた予約にはキャンセルの導線を出さない（4.4-
 
     visitReservationDetail($user, $reservation)
         ->assertOk()
-        ->assertSee(__('front.cancel.unavailable.deadline'))
+        ->assertSee(__('front.cancel.unavailable.deadline', ['minutes' => Screening::CANCEL_DEADLINE_MINUTES]))
+        ->assertDontSee(':minutes')
         ->assertDontSee(__('front.cancel.start'));
 });
 
@@ -318,7 +319,7 @@ it('画面に導線が出ていても、実行時に期限を過ぎていれば�
     $screening->update(['starts_at' => CarbonImmutable::now()->addMinutes(10)]);
 
     $component->call('cancel')
-        ->assertSee(__('front.cancel.errors.deadline_passed'));
+        ->assertSee(__('front.cancel.errors.deadline_passed', ['minutes' => Screening::CANCEL_DEADLINE_MINUTES]));
 
     expect($reservation->refresh()->status)->toBe(ReservationStatus::Paid);
 });

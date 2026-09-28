@@ -10,6 +10,8 @@
     late_entry）をそのまま参照し、同意画面と表記を一致させる。別の文言を書かない。
     これに 4.4 の「手数料なし・全額返金」「座席の一部のみのキャンセル不可」
     「入場済みの予約はキャンセル不可」を加える。
+
+    cancel_deadline はキャンセル期限の分数を `:minutes` の置換で差し込む（4.9.5）。
 --}}
 <x-front.page
     :title="__('front.pages.terms.title')"
@@ -42,7 +44,7 @@
         <p class="mt-4">{{ __('front.pages.terms.article4_lead') }}</p>
         <ul class="mt-3 list-inside list-disc space-y-1">
             <li>{{ __('front.reservation.agreement.terms.no_change') }}</li>
-            <li>{{ __('front.reservation.agreement.terms.cancel_deadline') }}</li>
+            <li>{{ __('front.reservation.agreement.terms.cancel_deadline', ['minutes' => \App\Models\Screening::CANCEL_DEADLINE_MINUTES]) }}</li>
             <li>{{ __('front.reservation.agreement.terms.late_entry') }}</li>
             <li>{{ __('front.pages.terms.no_fee_full_refund') }}</li>
             <li>{{ __('front.pages.terms.no_partial_cancel') }}</li>

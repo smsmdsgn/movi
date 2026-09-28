@@ -12,9 +12,15 @@
     $confirmingCancel: この予約に対する確認を出しているか
     $cancelledNotice: キャンセルが成立した場合の案内の文言キー（無ければ null）
     $refundPending: キャンセルは成立したが返金が未了か（見出しと配色を分ける）
+    $cancelDeadlineMinutes: キャンセル期限（上映開始の何分前まで）。`CancelsReservation::cancelViewData()`
+        が渡す。文言の `:minutes` へ差し込む（4.9.5）
     $idPrefix: 見出しのIDの接頭辞
+
+    **文言キーを変数で受けて `__()` する箇所には、置換値を常に渡す**（4.9.5）。いま `:minutes`
+    を含むのは `front.cancel.unavailable.deadline` だけだが、キーはサービスとトレイトが
+    決めるため、呼び分けを設けない（使わない置換は無視される。A-16 の入場ゲートと同じ扱い）。
 --}}
-@props(['cancelState', 'confirmingCancel', 'cancelledNotice', 'refundPending', 'idPrefix'])
+@props(['cancelState', 'confirmingCancel', 'cancelledNotice', 'refundPending', 'cancelDeadlineMinutes', 'idPrefix'])
 @php
     /** @var array{available: bool, noticeKey: string|null}|null $cancelState */
 @endphp
@@ -36,7 +42,7 @@
         <h3 id="{{ $idPrefix }}-cancel-heading" class="font-bold {{ $refundPending ? 'text-red-900' : '' }}">
             {{ __($refundPending ? 'front.cancel.refund_pending_heading' : 'front.cancel.done_heading') }}
         </h3>
-        <p class="mt-2 text-sm">{{ __($cancelledNotice) }}</p>
+        <p class="mt-2 text-sm">{{ __($cancelledNotice, ['minutes' => $cancelDeadlineMinutes]) }}</p>
     </section>
 @elseif ($cancelState !== null)
     <section aria-labelledby="{{ $idPrefix }}-cancel-heading" {{ $attributes->merge(['class' => 'mt-4 border border-stone-300 p-4']) }}>
@@ -44,7 +50,7 @@
 
         @if (! $cancelState['available'])
             {{-- 期限切れ・入場済み。理由を示し、ボタンは出さない。 --}}
-            <p class="mt-2 text-sm">{{ __($cancelState['noticeKey']) }}</p>
+            <p class="mt-2 text-sm">{{ __($cancelState['noticeKey'], ['minutes' => $cancelDeadlineMinutes]) }}</p>
         @elseif ($confirmingCancel)
             {{-- 取り消せない操作のため確認を1段挟む（4.3.18）。 --}}
             <p class="mt-2 font-bold text-red-900">{{ __('front.cancel.confirm_heading') }}</p>
@@ -70,7 +76,7 @@
                 </button>
             </div>
         @else
-            <p class="mt-2 text-sm">{{ __('front.cancel.lead') }}</p>
+            <p class="mt-2 text-sm">{{ __('front.cancel.lead', ['minutes' => $cancelDeadlineMinutes]) }}</p>
             <p class="mt-1 text-sm text-stone-600">{{ __('front.cancel.refund_note') }}</p>
 
             <button

@@ -42,9 +42,12 @@ class Screening extends Model
 
     /**
      * キャンセルの受付期限は上映開始の何分前までか（4.4-1）。
-     * 導線の出し分け（P-07・将来の P-06）と `ReservationService::cancel()` の双方が
+     * 導線の出し分け（P-06・P-07）と `ReservationService::cancel()` の双方が
      * 本定数と `acceptsCancellationAt()` を参照し、期限の規則を1箇所に持つ
      * （`SALES_START_DAYS_BEFORE` と `isOnSale()` の関係と同じ扱い）。
+     *
+     * **画面の文言も本定数から差し込む**（4.9.5。P-06・P-07・P-11・P-16・P-19・P-32・P-37）。
+     * 文言に分数を直書きしないこと。定数を変えたときに表示と判定が食い違う。
      */
     public const int CANCEL_DEADLINE_MINUTES = 20;
 
@@ -93,7 +96,7 @@ class Screening extends Model
     }
 
     /**
-     * キャンセルの受付期限（4.4-1）。上映開始の20分前。
+     * キャンセルの受付期限（4.4-1）。上映開始の `CANCEL_DEADLINE_MINUTES` 分前。
      */
     public function cancelDeadline(): CarbonImmutable
     {
