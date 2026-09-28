@@ -696,6 +696,9 @@ return [
             'email' => 'メールアドレス',
             'category' => '種別',
             'body' => 'お問い合わせ内容',
+            /* Cloudflare Turnstile（4.9.2「ボット対策」/ 4.9.8）。「ボット対策」「トークン」
+               の語は使わない（20.3-4）。ウィジェット自体の表示と揃える。 */
+            'turnstileToken' => '人間であることの確認',
         ],
         'category_placeholder' => '選択してください',
         /* 種別の選択肢（4.9.2）。`App\Enums\ContactCategory` の並びと一致させる。 */
@@ -709,9 +712,16 @@ return [
             'other' => 'その他',
         ],
         'submit' => '送信する',
+        /* Turnstile のウィジェットが描画できない場合の案内（4.9.8「キー未設定時」）。 */
+        'turnstile' => [
+            'unavailable' => 'ただいま送信前の確認を行えないため、お問い合わせを送信できません。時間をおいて、ページを再読み込みしてください。',
+        ],
         'errors' => [
             'summary' => 'ご入力の内容に:count件の誤りがあります。',
             'jump_to_first' => '最初の項目へ移動',
+            'jump_to_turnstile' => '確認の欄へ移動',
+            'turnstile_required' => '「人間であることの確認」が完了していません。確認が完了してから送信してください。',
+            'turnstile_failed' => '「人間であることの確認」ができませんでした。お手数ですが、もう一度確認を行ってから送信してください。',
         ],
         'complete' => [
             'title' => 'お問い合わせ送信完了｜MOVI',

@@ -11,6 +11,17 @@
     :heading="__('front.contact.heading')"
     :description="__('front.contact.description')"
 >
+    {{-- Turnstile のウィジェット（4.9.2「ボット対策」/ 4.9.8）は Cloudflare の配信元から
+         読み込む（17.7 のCSP `script-src`）。P-36 の Stripe.js（4.3.14）と同じ構成で、
+         npm で同梱すると自サイトのコードとして扱われてしまう。`render=explicit` を指定し、
+         Alpine の x-init から `turnstile.render()` を呼んで描画する。キーが揃っていない
+         場合はウィジェットを描かないため読み込まない（4.9.8「キー未設定時」）。 --}}
+    @if ($isTurnstileEnabled)
+        @push('head')
+            <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
+        @endpush
+    @endif
+
     <p>{{ __('front.contact.lead') }}</p>
 
     <p class="border border-stone-300 bg-stone-50 p-3 text-sm">

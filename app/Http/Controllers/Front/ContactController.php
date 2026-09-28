@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Front;
 
 use App\Http\Controllers\Controller;
+use App\Services\TurnstileService;
 use Illuminate\View\View;
 
 /**
@@ -13,11 +14,16 @@ use Illuminate\View\View;
  *
  * **館非依存ページ（P-05〜P-20）のため `{slug}` を持たず、館の解決も行わない。**
  * ヘッダー（`x-front.header`）が `CurrentCinemaService` から自前で解決する。
+ *
+ * Turnstile のキーが揃っていない場合は、ウィジェットを描かないため `api.js` も
+ * 読み込ませない（4.9.8「キー未設定時」）。
  */
 class ContactController extends Controller
 {
-    public function __invoke(): View
+    public function __invoke(TurnstileService $turnstile): View
     {
-        return view('front.contact.index');
+        return view('front.contact.index', [
+            'isTurnstileEnabled' => $turnstile->isConfigured(),
+        ]);
     }
 }
