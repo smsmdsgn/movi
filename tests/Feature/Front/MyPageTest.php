@@ -11,6 +11,7 @@ use App\Models\Seat;
 use App\Models\Stamp;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 
 /*
  * マイページ（P-05、7.14 / 4.5.3）。スタンプ数・無料鑑賞券・予約の振り分けと、
@@ -169,6 +170,66 @@ it('期限切れの無料鑑賞券は保有枚数に数えない（4.5.2-4）', 
         ->assertOk()
         ->assertSee(__('front.mypage.free_ticket.none'))
         ->assertDontSee($expired->code);
+});
+
+it('無料鑑賞券が6枚以上だと期限の近い5枚を表示し、残りは開閉の中に置く（4.5.3 / 旧12章 残課題42）', function () {
+    $user = User::factory()->create();
+
+    // 作成順と期限順が一致しないようにする（期限の順で並ぶことも確かめる）。
+    $tickets = collect([6, 2, 4, 1, 5, 3])
+        ->map(fn (int $daysUntilExpiry) => issueFreeTicket($user, CarbonImmutable::now()->addDays($daysUntilExpiry)));
+
+    $sorted = $tickets->sortBy(fn (FreeTicket $ticket) => $ticket->expires_at)->values();
+
+    $this->actingAs($user)
+        ->get(route('front.mypage.index'))
+        ->assertOk()
+        ->assertSee(__('front.mypage.free_ticket.count', ['count' => 6]))
+        ->assertSeeInOrder([
+            $sorted[0]->code,
+            $sorted[1]->code,
+            $sorted[2]->code,
+            $sorted[3]->code,
+            $sorted[4]->code,
+            __('front.mypage.free_ticket.more', ['count' => 1]),
+            $sorted[5]->code,
+        ]);
+});
+
+it('無料鑑賞券がちょうど5枚だと開閉を出さない（4.5.3 / 旧12章 残課題42）', function () {
+    $user = User::factory()->create();
+
+    collect(range(1, 5))->each(fn (int $daysUntilExpiry) => issueFreeTicket($user, CarbonImmutable::now()->addDays($daysUntilExpiry)));
+
+    // ヘッダーのモバイルメニューも `<details>` を使うため（`x-front.header`）、
+    // タグそのものの有無では判定できない。開閉の文言のうち枚数の後ろの部分
+    // （「枚を表示」）を言語キーから取り出し、その有無で判定する。
+    $moreSuffix = Str::after(__('front.mypage.free_ticket.more'), ':count');
+
+    $this->actingAs($user)
+        ->get(route('front.mypage.index'))
+        ->assertOk()
+        ->assertSee(__('front.mypage.free_ticket.count', ['count' => 5]))
+        ->assertDontSee($moreSuffix);
+});
+
+it('件数と開閉は使える券だけで数える。6枚のうち1枚を使うと見出しは5枚になり開閉を出さない（4.5.3 / 旧12章 残課題42）', function () {
+    $user = User::factory()->create();
+    ['reservation' => $reservation] = mypageReservation($user);
+
+    $tickets = collect(range(1, 6))
+        ->map(fn (int $daysUntilExpiry) => issueFreeTicket($user, CarbonImmutable::now()->addDays($daysUntilExpiry)));
+
+    // 使用状態は `t_reservations.active_free_ticket_id`（生成列）から導出する（6.1追記表）。
+    $used = $tickets->first();
+    $reservation->forceFill(['free_ticket_id' => $used->id])->save();
+
+    $this->actingAs($user)
+        ->get(route('front.mypage.index'))
+        ->assertOk()
+        ->assertSee(__('front.mypage.free_ticket.count', ['count' => 5]))
+        ->assertDontSee(Str::after(__('front.mypage.free_ticket.more'), ':count'))
+        ->assertDontSee($used->code);
 });
 
 it('これからの予約と過去の予約を上映終了時刻で振り分ける（7.14 構成要素2・3）', function () {

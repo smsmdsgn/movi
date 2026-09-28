@@ -637,6 +637,7 @@ return [
         'free_ticket' => [
             'heading' => '無料鑑賞券',
             'count' => ':count枚',
+            'more' => 'ほか:count枚を表示',
             'none' => 'ご利用いただける無料鑑賞券はございません。',
             'expires_at' => '有効期限',
             'code' => '券番号',

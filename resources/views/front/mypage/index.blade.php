@@ -3,7 +3,9 @@
 
     $stampCount: 未交換のスタンプ数（4.5.1-2）
     $stampsPerTicket: 無料鑑賞券1枚に要するスタンプ数
-    $freeTickets: Collection<FreeTicket>（使える券のみ。期限の近い順）
+    $freeTicketCount: 使える券の全枚数（見出しに出す。4.5.3）
+    $freeTickets: Collection<FreeTicket>（先頭5枚。期限の近い順。`MyPageController::FREE_TICKETS_SHOWN`）
+    $moreFreeTickets: Collection<FreeTicket>（6枚目以降。開閉の中に置く。4.5.3）
     $upcoming: Collection<Reservation>（これからの予約。上映開始の早い順）
     $history: LengthAwarePaginator<Reservation>（過去の予約。上映開始の新しい順）
 
@@ -13,7 +15,9 @@
     インデックス対象外（19.3-6）。
 --}}
 @php
+    /** @var int $freeTicketCount */
     /** @var \Illuminate\Database\Eloquent\Collection<int, \App\Models\FreeTicket> $freeTickets */
+    /** @var \Illuminate\Database\Eloquent\Collection<int, \App\Models\FreeTicket> $moreFreeTickets */
     /** @var \Illuminate\Database\Eloquent\Collection<int, \App\Models\Reservation> $upcoming */
     /** @var \Illuminate\Contracts\Pagination\LengthAwarePaginator<int, \App\Models\Reservation> $history */
 @endphp
@@ -67,22 +71,33 @@
         <section aria-labelledby="free-ticket-heading" class="mt-4 border border-stone-300 p-4">
             <h2 id="free-ticket-heading" class="font-bold">
                 {{ __('front.mypage.free_ticket.heading') }}
-                <span class="ml-1 text-sm font-normal text-stone-600">{{ __('front.mypage.free_ticket.count', ['count' => $freeTickets->count()]) }}</span>
+                <span class="ml-1 text-sm font-normal text-stone-600">{{ __('front.mypage.free_ticket.count', ['count' => $freeTicketCount]) }}</span>
             </h2>
 
-            @if ($freeTickets->isEmpty())
+            @if ($freeTicketCount === 0)
                 <p class="mt-3 text-sm">{{ __('front.mypage.free_ticket.none') }}</p>
             @else
                 <ul class="mt-3 space-y-2 text-sm">
                     @foreach ($freeTickets as $ticket)
-                        <li class="flex flex-wrap items-baseline justify-between gap-2 border-b border-stone-200 pb-2 last:border-b-0 last:pb-0">
-                            <span class="tabular-nums">{{ __('front.mypage.free_ticket.code') }}: {{ $ticket->code }}</span>
-                            <span class="tabular-nums text-stone-700">
-                                {{ __('front.mypage.free_ticket.expires_at') }}: {{ $ticket->expires_at->format('Y/n/j') }}
-                            </span>
-                        </li>
+                        <x-front.mypage.free-ticket-item :ticket="$ticket" />
                     @endforeach
                 </ul>
+
+                @if ($moreFreeTickets->isNotEmpty())
+                    {{-- 4.5.3「無料鑑賞券の一覧の件数」/ 旧12章 残課題42。期限の近い券を
+                         見落とさないよう先頭5枚を通常表示し、残りはたたんで残す。
+                         Livewire を用いないため JavaScript を要さない `<details>` とする。 --}}
+                    <details class="mt-2">
+                        <summary class="cursor-pointer text-sm underline decoration-stone-400">
+                            {{ __('front.mypage.free_ticket.more', ['count' => $moreFreeTickets->count()]) }}
+                        </summary>
+                        <ul class="mt-3 space-y-2 text-sm">
+                            @foreach ($moreFreeTickets as $ticket)
+                                <x-front.mypage.free-ticket-item :ticket="$ticket" />
+                            @endforeach
+                        </ul>
+                    </details>
+                @endif
 
                 {{-- 12章 残課題31。券を選ぶ画面が無いため、使い道を約束しない。 --}}
                 <p class="mt-3 border border-stone-300 bg-stone-50 p-3 text-xs">{{ __('front.mypage.free_ticket.pending') }}</p>

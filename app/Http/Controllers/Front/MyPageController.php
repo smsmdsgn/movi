@@ -31,6 +31,9 @@ class MyPageController extends Controller
     /** 過去の予約の1ページあたりの件数（7.14 構成要素3）。 */
     private const int HISTORY_PER_PAGE = 10;
 
+    /** 無料鑑賞券の一覧に通常表示する件数（4.5.3。残りは `<details>` の中に置く）。 */
+    private const int FREE_TICKETS_SHOWN = 5;
+
     public function __invoke(): View
     {
         /** @var User $user */
@@ -38,11 +41,18 @@ class MyPageController extends Controller
 
         $now = Date::now();
 
+        // 全件を取得してから分ける。見出しの枚数（保有する全枚数）と、6枚目以降を
+        // 開閉の中に描くことの双方に全件が要る（4.5.3）。件数だけを数え直したり、
+        // 一覧を `limit()` で取ったりしないこと（開閉の中が空になり、使えない券を数えうる）。
+        $freeTickets = $this->availableFreeTickets($user, $now);
+
         return view('front.mypage.index', [
             // 7.14 構成要素1。スタンプ数は行数の集計で求める（4.5.1 実装方針）。
             'stampCount' => $user->unexchangedStamps()->count(),
             'stampsPerTicket' => FreeTicket::STAMPS_PER_TICKET,
-            'freeTickets' => $this->availableFreeTickets($user, $now),
+            'freeTicketCount' => $freeTickets->count(),
+            'freeTickets' => $freeTickets->take(self::FREE_TICKETS_SHOWN),
+            'moreFreeTickets' => $freeTickets->slice(self::FREE_TICKETS_SHOWN)->values(),
             // 7.14 構成要素2・3
             'upcoming' => $this->upcomingReservations($user, $now),
             'history' => $this->pastReservations($user, $now),
@@ -64,6 +74,9 @@ class MyPageController extends Controller
             ->available($now)
             // 期限の近いものから示す。使い忘れを防ぐ並びにする。
             ->orderBy('expires_at')
+            // B-03 は1回の交換で同じ期限の券を複数枚発行する（4.5.5）。先頭5枚と開閉の中の
+            // 境界が読み込むたびに入れ替わらないよう、発行順で並びを確定させる（4.5.3）。
+            ->orderBy('id')
             ->get();
     }
 
