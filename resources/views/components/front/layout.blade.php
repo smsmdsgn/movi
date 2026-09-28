@@ -11,6 +11,9 @@
       時間の経過とともに存在しなくなるため除外する（19.3-6。`robots.txt` は未実装）
     - jsonLd: JSON-LD の配列（`MovieTheater` / `Movie` / `BreadcrumbList`、19.3-4・9）。
       `application/ld+json` はスクリプトとして実行されないため CSP（17.7）の script-src の対象外
+
+    stack('tracking'): 計測タグの差し込み位置（4.9.3 / 4.9.7）。Cookie同意ダイアログで
+    「同意する」を選択した利用者にのみ出力する。現時点で積むタグは無い
 --}}
 @props([
     'title' => null,
@@ -25,9 +28,13 @@
     $pageTitle = $title ?? config('app.name', 'MOVI');
     $pageDescription = $description ?? __('front.meta.default_description');
     $canonicalUrl = $canonical ?? url()->current();
+    $cookieConsent = \App\Enums\CookieConsent::fromRequest(request());
 @endphp
 <!DOCTYPE html>
-<html lang="ja">
+{{-- Cookie同意ダイアログを出すページでは、キーボードでフォーカスした要素が画面下部の
+     ダイアログの裏に隠れないよう、スクロールの下端に余白を取る（4.9.7「表示位置」）。
+     値はダイアログの高さ（375px幅で約200px、md 以上で約100px）に合わせる。 --}}
+<html lang="ja" @class(['scroll-pb-52 md:scroll-pb-32' => $cookieConsent === null])>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -64,6 +71,16 @@
          置き、`defer` の実行順（文書順）で Alpine の初期化より先に読み込ませる。
          スタックは本レイアウトの描画より前にスロット側で積まれるため、head で受けられる。 --}}
     @stack('head')
+
+    {{-- 計測タグの差し込み位置（4.9.3「拒否時にタグを出力しない分岐」/ 4.9.7「計測タグの分岐」）。
+         Cookie同意ダイアログで「同意する」を選択した利用者にのみ出力する。未選択・拒否・
+         未知の値では出力しない（オプトイン）。選択した画面自体ではまだ出ず、次のページ
+         読み込みから出る（Cookie がその応答で初めて Set-Cookie されるため）。
+         現時点で積むタグは無い。積む際は CSP（17.7）に従うこと（インラインの初期化
+         スクリプトは使えず、配信元を script-src / connect-src / img-src に加える）。 --}}
+    @if ($cookieConsent?->allowsTracking())
+        @stack('tracking')
+    @endif
 </head>
 <body class="flex min-h-screen flex-col bg-white text-stone-900">
     <x-front.header />
@@ -73,6 +90,13 @@
     </main>
 
     <x-front.footer />
+
+    {{-- Cookie同意ダイアログ（4.9.3 / 4.9.7）。選択済みの利用者にはコンポーネントごと
+         出力しない（レイアウトが Cookie を読んで分岐する）。<body> の直下に置くこと
+         （ルート要素の sticky が効くため。内側に置くと親要素の高さの分しか動けない）。 --}}
+    @if ($cookieConsent === null)
+        <livewire:front.cookie-consent.dialog />
+    @endif
 
     @livewireScripts
 </body>

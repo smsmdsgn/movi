@@ -1,11 +1,14 @@
 {{--
-    Cookieポリシー（P-18、7.1.1 / 4.9.1 / 4.9.3。工程7-f）。ダミー本文のため冒頭に注記を出す。
+    Cookieポリシー（P-18、7.1.1 / 4.9.1 / 4.9.3。工程7-f、工程9-aで更新）。
+    ダミー本文のため冒頭に注記を出す。
 
     本サイトが使用するCookie（セッション、選択中の館 cinema_slug、CSRF対策、ログイン保持
-    remember_web_*、決済画面の Stripe の __stripe_mid・__stripe_sid）を一覧する（4.9.5）。
+    remember_web_*、決済画面の Stripe の __stripe_mid・__stripe_sid、Cookie同意ダイアログの
+    選択結果 cookie_consent）を一覧する（4.9.5 / 4.9.7）。
     `Cinema::SESSION_KEY` と `config/session.php` の値に基づく（セッションの
     有効期間は `lifetime`＝120分、cinema_slug は `CurrentCinemaService` が
-    1年（60分×24×365）で保存する）。
+    1年（60分×24×365）で保存する）。cookie_consent（`App\Enums\CookieConsent`）も
+    同じく1年で保存する（4.9.7「保存する Cookie」）。
 --}}
 <x-front.page
     :title="__('front.pages.cookie-policy.title')"
@@ -41,6 +44,10 @@
 
     <section class="mt-8">
         <x-front.section-heading>{{ __('front.pages.cookie-policy.consent_heading') }}</x-front.section-heading>
-        <p class="mt-4">{{ __('front.pages.cookie-policy.consent_note') }}</p>
+        <div class="mt-4 space-y-4">
+            @foreach (__('front.pages.cookie-policy.consent_notes') as $note)
+                <p>{{ $note }}</p>
+            @endforeach
+        </div>
     </section>
 </x-front.page>

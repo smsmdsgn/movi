@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\CookieConsent;
 use App\Models\Cinema;
 use App\Models\FreeTicket;
 use App\Models\Screening;
@@ -87,7 +88,7 @@ it('特定商取引法に基づく表記のキャンセル期限は定数から�
         ->assertDontSee('の:minutes分');
 });
 
-it('Cookieポリシーは実装が発行するCookieを載せ、未実装の同意ダイアログを既存のものとして案内しない（4.9.5）', function () {
+it('Cookieポリシーは同意の選択結果を含め実装が発行するCookieを載せ、同意ダイアログを導入予定として案内しない（4.9.5 / 4.9.7）', function () {
     createCinema('gion', '祇園ムビ');
 
     $this->get(route('front.cookie-policy.index'))
@@ -96,5 +97,6 @@ it('Cookieポリシーは実装が発行するCookieを載せ、未実装の同�
         ->assertSee('XSRF-TOKEN')
         ->assertSee('remember_web_')
         ->assertSee('__stripe_mid')
-        ->assertSee('導入を予定しております');
+        ->assertSee(CookieConsent::COOKIE_NAME)
+        ->assertDontSee('導入を予定しております');
 });
