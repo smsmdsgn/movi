@@ -25,12 +25,15 @@ use App\Services\CompletedReservations;
  * `AuthorizeAdminScreen` ミドルウェアはフルページロードのみを保護し
  * `/livewire/update` 経由のアクション呼び出しには適用されないため（4.8.6追記表）、
  * 一覧取得・明細表示のたびにこのPolicyで判定する。
+ *
+ * 操作者（管理者）自身が有効であることは本Policyでは確認しない。無効化された管理者は
+ * `AppServiceProvider::denyInactiveAdmins()`（`Gate::before`）が全アビリティで拒否する。
  */
 class ReservationPolicy
 {
     public function viewAny(Admin $admin): bool
     {
-        return $admin->is_active && $admin->role !== AdminRole::Gate;
+        return $admin->role !== AdminRole::Gate;
     }
 
     /**
@@ -39,7 +42,7 @@ class ReservationPolicy
      */
     public function checkIn(Admin $admin): bool
     {
-        return $admin->is_active;
+        return true;
     }
 
     /**
@@ -48,7 +51,7 @@ class ReservationPolicy
      */
     public function revokeCheckIn(Admin $admin): bool
     {
-        return $admin->is_active && $admin->role !== AdminRole::Gate;
+        return $admin->role !== AdminRole::Gate;
     }
 
     /**

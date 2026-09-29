@@ -13,22 +13,28 @@ use App\Models\Admin;
  * `AuthorizeAdminScreen` ミドルウェアはフルページロードのみを保護し
  * `/livewire/update` 経由のアクション呼び出しには適用されないため（4.8.6追記表）、
  * 一覧取得・作成・更新のたびにこのPolicyで判定する。
+ *
+ * **操作者自身が有効であることは本Policyでは確認しない。** 無効化された管理者は
+ * `AppServiceProvider::denyInactiveAdmins()`（`Gate::before`）が全アビリティで拒否する。
+ * A-14 ではこれが「有効な `super-admin` が最低1人残る」の前提となる。`is_active` は
+ * ログイン時にしか評価されず、Aが無効化したBのセッションが残るため、BがAを無効化すると
+ * 有効な `super-admin` が0人になり復旧できない（4.8.4-4）。
  */
 class AdminPolicy
 {
     public function viewAny(Admin $admin): bool
     {
-        return $this->isActiveSuperAdmin($admin);
+        return $this->isSuperAdmin($admin);
     }
 
     public function create(Admin $admin): bool
     {
-        return $this->isActiveSuperAdmin($admin);
+        return $this->isSuperAdmin($admin);
     }
 
     public function update(Admin $admin, Admin $target): bool
     {
-        return $this->isActiveSuperAdmin($admin);
+        return $this->isSuperAdmin($admin);
     }
 
     /**
@@ -41,7 +47,7 @@ class AdminPolicy
      */
     public function manageAccess(Admin $admin, Admin $target): bool
     {
-        return $this->isActiveSuperAdmin($admin) && $admin->id !== $target->id;
+        return $this->isSuperAdmin($admin) && $admin->id !== $target->id;
     }
 
     /**
@@ -56,19 +62,11 @@ class AdminPolicy
      */
     public function updateOwnPassword(Admin $admin): bool
     {
-        return $admin->is_active && $admin->role !== AdminRole::Gate;
+        return $admin->role !== AdminRole::Gate;
     }
 
-    /**
-     * 操作者自身が**有効な** `super-admin` であること。
-     *
-     * `is_active` はログイン時にしか評価されない（`EnsureAdminIsActive` の説明を参照）。
-     * 同ミドルウェアがセッションを打ち切るため通常はここへ到達しないが、
-     * **無効化された管理者どうしが相互に無効化して有効な `super-admin` を0人にする経路は
-     * 復旧不能**（4.8.4-4）であるため、Policy 側でも操作者の有効性を確認する。
-     */
-    private function isActiveSuperAdmin(Admin $admin): bool
+    private function isSuperAdmin(Admin $admin): bool
     {
-        return $admin->is_active && $admin->role === AdminRole::SuperAdmin;
+        return $admin->role === AdminRole::SuperAdmin;
     }
 }

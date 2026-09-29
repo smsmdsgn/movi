@@ -50,6 +50,9 @@ class Admin extends Authenticatable
      * `view-admin-screen` Gate（AppServiceProvider）で到達可能な最初の画面を返す。
      * `gate` ロールはダッシュボードへ到達できないため、この解決が無いと
      * ログイン直後に403へ遷移してしまう（17.1.3）。
+     *
+     * **有効な管理者に対してのみ呼ぶこと。** 無効化された管理者は `Gate::before` により
+     * どの画面にも到達できず、403となる（`/admin/login` が `EnsureAdminIsActive` を先に置く理由）。
      */
     public function landingRouteName(): string
     {

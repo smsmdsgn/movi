@@ -37,7 +37,9 @@ use Illuminate\Support\Facades\Route;
 |
 */
 Route::prefix('admin')->group(function (): void {
-    Route::get('login', Login::class)->middleware('guest:admin')->name('admin.login');
+    // `guest:admin` はログイン済みの管理者を `landingRouteName()` の画面へ送るが、無効化された
+    // 管理者は `Gate::before` により到達先が無く403になる。先にセッションを打ち切る（17.1.2-6）。
+    Route::get('login', Login::class)->middleware([EnsureAdminIsActive::class, 'guest:admin'])->name('admin.login');
     Route::post('logout', LogoutController::class)->middleware('auth:admin')->name('admin.logout');
 
     Route::middleware(['auth:admin', EnsureAdminIsActive::class, AuthorizeAdminScreen::class])->name('admin.')->group(function (): void {

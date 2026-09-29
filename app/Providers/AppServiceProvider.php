@@ -39,6 +39,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->denyInactiveAdmins();
         $this->configureAdminScreenGate();
 
         // 無効化された管理者のセッション打ち切り（17.1.2-6）を `/livewire/update`
@@ -76,6 +77,21 @@ class AppServiceProvider extends ServiceProvider
                 ->uncompromised()
             : null,
         );
+    }
+
+    /**
+     * 無効化された管理者（17.1.2-6）には、すべての Gate・Policy の判定で権限を与えない。
+     *
+     * セッションの打ち切りは `EnsureAdminIsActive` が担うが、権限の判定は同ミドルウェアの
+     * 有無に依存させない。操作者の有効性を Policy ごとに確認すると、確認の有無が Policy
+     * ごとにばらつき、追加した Policy で書き漏れる（4.8.6追記表「操作者の有効性の確認」）。
+     * 顧客（`User`）とゲストは対象外とし、`null` を返して通常の判定へ委ねる。
+     */
+    private function denyInactiveAdmins(): void
+    {
+        Gate::before(function (mixed $user): ?bool {
+            return $user instanceof Admin && ! $user->is_active ? false : null;
+        });
     }
 
     /**

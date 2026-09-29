@@ -6,8 +6,8 @@ use App\Livewire\Admin\EntryGate\Index;
 use App\Models\Cinema;
 use App\Models\Reservation;
 use App\Models\Screening;
-use App\Policies\ReservationPolicy;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Livewire;
@@ -355,5 +355,5 @@ it('無効化された管理者は入場の記録を拒否される（17.1.2-6 /
     $admin->is_active = false;
     $admin->save();
 
-    expect((new ReservationPolicy)->checkIn($admin))->toBeFalse();
+    expect(Gate::forUser($admin)->allows('checkIn', Reservation::class))->toBeFalse();
 });

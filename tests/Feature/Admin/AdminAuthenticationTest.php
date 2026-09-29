@@ -109,6 +109,16 @@ it('gate ロールがログイン済みで /admin/login にアクセスすると
         ->assertRedirect(route('admin.gate.index'));
 });
 
+it('無効化された管理者がログイン済みのまま /admin/login にアクセスすると、ログアウトされてログイン画面へ戻る（17.1.2-6）', function (AdminRole $role) {
+    $admin = createAdmin($role, $role === AdminRole::SuperAdmin ? null : createCinema());
+    $this->actingAs($admin, 'admin');
+    $admin->update(['is_active' => false]);
+
+    $this->get(route('admin.login'))->assertRedirect(route('admin.login'));
+    $this->assertGuest('admin');
+    $this->get(route('admin.login'))->assertOk();
+})->with([AdminRole::SuperAdmin, AdminRole::Gate]);
+
 it('ログアウトできる', function () {
     $admin = createAdmin();
 

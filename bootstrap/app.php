@@ -39,6 +39,8 @@ return Application::configure(basePath: dirname(__DIR__))
             // このクロージャは admin ガードで認証済みの場合のみ呼ばれる想定
             // （routes/admin.php の /admin/login は必ず guest:admin を使うこと。
             // ガード指定なしの guest を使うと web ガードの認証状態と衝突しループしうる）。
+            // 無効化された管理者は landingRouteName() が403になるため、guest:admin の前に
+            // EnsureAdminIsActive を置いてセッションを打ち切ること（17.1.2-6）。
             $admin = Auth::guard('admin')->user();
 
             return $admin instanceof Admin ? route($admin->landingRouteName()) : route('admin.login');

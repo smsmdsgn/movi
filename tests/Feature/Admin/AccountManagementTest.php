@@ -326,15 +326,15 @@ it('無効化された super-admin は他の super-admin を無効化できな�
     $first = createAdmin();
     $second = createAdmin();
 
-    // 1人目が2人目を無効化する。2人目のセッションはこの時点では残っている。
-    $this->actingAs($first, 'admin');
-    Livewire::test(Index::class)->call('toggleActive', $second->id);
-    expect($second->refresh()->is_active)->toBeFalse();
-
-    // 無効化された2人目が1人目を無効化できてはならない。
+    // 2人目が有効なうちに開いていた画面から、無効化された後に操作する。
+    // 描画時の一覧取得（viewAny）ではなく、アクションの判定（manageAccess）を通すため。
     $this->actingAs($second, 'admin');
-    Livewire::test(Index::class)->call('toggleActive', $first->id);
-})->throws(AuthorizationException::class);
+    $component = Livewire::test(Index::class);
+    $second->update(['is_active' => false]);
+
+    expect(fn () => $component->call('toggleActive', $first->id))->toThrow(AuthorizationException::class)
+        ->and($first->refresh()->is_active)->toBeTrue();
+});
 
 it('自分自身を無効化できない（自らを締め出さないため）', function () {
     $this->withoutExceptionHandling();
