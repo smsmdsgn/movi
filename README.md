@@ -390,7 +390,7 @@ FLUSH PRIVILEGES;
 
 **テスト用データベースの作成**
 
-`php artisan test` は開発用データベース（`movi`）とは別の `movi_testing` に対して実行する
+テストは開発用データベース（`movi`）とは別の `movi_testing` に対して実行する
 （テストのたびに `RefreshDatabase` でテーブルを作り直すため、開発用データを保護する）。
 接続情報（ホスト・ユーザー名・パスワード）は `.env` の値をそのまま使うため、
 上記で設定したものと同じ資格情報で `movi_testing` を作成する。
@@ -637,13 +637,16 @@ php artisan view:cache
 各タスクの完了時に以下を実行する（基本設計書 16.2）。
 
 ```bash
-vendor/bin/pint --dirty      # コード整形
-vendor/bin/phpstan analyse   # 静的解析
-php artisan test             # テスト（movi_testing データベースに対して実行する）
-git diff --stat              # 変更範囲の確認
+vendor/bin/pint --dirty                        # コード整形
+vendor/bin/phpstan analyse --memory-limit=1G   # 静的解析
+php -d memory_limit=1G vendor/bin/pest         # テスト（movi_testing データベースに対して実行する）
+git diff --stat                                # 変更範囲の確認
 ```
 
-`php artisan test` は MariaDB（`movi_testing`）に対して実行する。生成列や
+整形の確認・静的解析・テストは `composer test` でまとめて実行できる（CI も同じスクリプトを使う）。
+`php artisan test` はスイート全体では PHP 既定のメモリ上限（128M）で停止するため、全件の実行には使わない。
+
+テストは MariaDB（`movi_testing`）に対して実行する。生成列や
 ユニークインデックスのNULL挙動（6.4.2）はMariaDB固有のため、SQLiteでは
 正しく検証できない。未作成の場合は「3. データベースの作成」の手順を行うこと。
 

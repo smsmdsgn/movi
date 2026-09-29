@@ -44,8 +44,8 @@ model: sonnet
 
 ```
 vendor/bin/pint --dirty
-vendor/bin/phpstan analyse
-php artisan test
+vendor/bin/phpstan analyse --memory-limit=1G
+php -d memory_limit=1G vendor/bin/pest
 ```
 
 ## 報告形式

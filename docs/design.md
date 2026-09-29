@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 版数 | 8.86 |
+| 版数 | 8.87 |
 | 作成日 | 2026-08-11 |
 | 開発体制 | 1名 |
 
@@ -750,8 +750,8 @@ Composer の導入手順など）は、アプリケーションの設計に影�
 | `extend()` の対象範囲 | **保持者キー単位であり上映回で絞らない**（`SeatLockService::extend()` の既存の仕様）。本工程では変更しない | 4.3.8 が「別々の上映回への同時リクエストでは2上映回のロックを持ちうる」と記録した状態では、P-36 の延長が他方の回のロックにも及ぶ。1上映回・8席の上限（4.3.4）自体は破らないため、引数（`screening_id`）の追加は P-37 で解放・延長を扱う際にまとめて判断する |
 | 券種IDの実在の確認 | `GuardsReservationStep` が、保持座席の網羅に加えて**券種マスタに実在するIDか**も確かめる | `PricingService::calculate()` は存在しないIDに `InvalidArgumentException` を投げる（13.4.5）。記録後に券種が消えると P-36 が500になり、4.3.10 の方針（例外にせず 7.17 の文言を返す）から外れる。A-07 に削除機能は無いため画面操作では到達しないが、シーダー・直接操作では起こりうる |
 | Stripe の失敗のログ | **残さない**（`TmdbService` と同じ。例外は `StripeException` へ置き換えて画面の文言キーだけを渡す） | 応答本文・リクエストURLは秘匿情報を含みうる（17.9-1）。ただし決済は検索と障害の重みが異なるため、**課金を行う P-37 の実装時に、リクエスト本文を含まない範囲（例外クラス名・Stripe のエラーコード）の記録を検討する** |
-| PHPStan のメモリ | `composer.json` の `types:check`・16.2 V-02・`CLAUDE.md` の作業手順に `--memory-limit=1G` を明記した（12章 残課題9-a の解消） | `stripe/stripe-php` の追加により、既定の 128M では並列ワーカーが確実に停止するようになった |
-| テスト実行のメモリ | 16.2 V-03 と `CLAUDE.md` の作業手順を `php -d memory_limit=1G vendor/bin/pest` に改めた（残課題9-b の一部解消） | 既定の `php artisan test` が 128M で停止することを本工程で再確認した。残課題9-b が「Pest を直接実行すること」と結論していたにもかかわらず、手順側が `php artisan test` のままで、そのとおり実行すると失敗していた |
+| PHPStan のメモリ | `composer.json` の `types:check`・16.2 V-02・`CLAUDE.md` の作業手順に `--memory-limit=1G` を明記した（旧12章 残課題9-a の解消） | `stripe/stripe-php` の追加により、既定の 128M では並列ワーカーが確実に停止するようになった |
+| テスト実行のメモリ | 16.2 V-03 と `CLAUDE.md` の作業手順を `php -d memory_limit=1G vendor/bin/pest` に改めた。**後に `composer.json` の `test`（`ci:check` と GitHub Actions が経由する）・README の確認手順・`implementer` の完了条件も同じコマンドへ揃えた**（旧12章 残課題9-b の解消） | 既定の `php artisan test` が 128M で停止することを本工程で再確認した。旧残課題9-b が「Pest を直接実行すること」と結論していたにもかかわらず、手順側が `php artisan test` のままで、そのとおり実行すると失敗していた。`php -d memory_limit=1G artisan test` は `artisan test` が起動する子プロセスへ `-d` が引き継がれないため回避策にならない。`composer.json` 側は `@php` 経由で呼ぶため Windows でも同じ記述で動く。**`CLAUDE.md` 末尾の Laravel Boost 節（`boost:update` が再生成する）は全件実行を `php artisan test --compact` と案内したまま据え置く**。手修正は再生成で消え、上書きには `.ai/guidelines/` 等の設定ファイルの追加を要するため。作業手順は同ファイル冒頭（16.2 と同じコマンド）に従う |
 
 #### 4.3.15 実装で確定した事項（工程5-l: 予約確認 P-37 と `ReservationService`）
 
@@ -3184,7 +3184,6 @@ Stripe へ問い合わせる**ことにした（4.3.19）。
 |---|---|---|---|
 | 3 | 仕様 | 座席レイアウト図（画像）の作成方法。**モーダル・凡例・開閉の導線は工程5-bで実装済み**であり、図の位置に「準備中」の案内を表示している（4.3.9）。素材が用意でき次第、`resources/views/front/reservation/seat-selection.blade.php` の当該箇所を画像に差し替える | 7.6.3 |
 | 6 | 仕様 | 二要素認証はスターターキット標準では有効（`config/fortify.php`）だが、17.14 / 2.5.1 は対象外としている。退会機能（旧項目7）と同種の「対象外機能のスターターキット残骸」であり、`UserFactory::withTwoFactor()` の no-op化のみで対応済みとしているが、関連するテスト（`AuthenticationTest.php` のスキップされるテスト、`SecurityTest.php` の本体が空のテスト）の要否を含め、認証実装（フェーズ3）着手前に撤去するか判断すること | 17.14 / 2.5.1 |
-| 9 | 実装 | PHP 既定の `memory_limit`（128M）に達して停止する箇所が2つある。（a）`vendor/bin/phpstan analyse`。**工程5-k で `composer.json` の `types:check` と 16.2 V-02 に `--memory-limit=1G` を明記して解消した**（`stripe/stripe-php` の追加により、既定の 128M では並列ワーカーが確実に停止するようになったため）。（b）スイート全体を1プロセスで実行した場合。A-05 でテストが増えた時点で超過するようになった（`tests/Feature/Database/` 単体では超えない）。`php -d memory_limit=1G artisan test` は回避策にならない（`artisan test` が起動する子プロセスへ `-d` が引き継がれないため、テストがさらに増えた時点で再び停止した）。**`php -d memory_limit=1G vendor/bin/pest` を使うこと**（Pestを直接実行すれば同一プロセスで走り、`-d` が効く）。**工程5-k で（b）も 16.2 V-03 と `CLAUDE.md` の手順を `php -d memory_limit=1G vendor/bin/pest` へ改め、手順どおりに実行すれば通る状態にした**（`composer.json` の `test` は `@php artisan test` のままであり、`composer test` / `ci:check` 経由では依然として停止する）。CI/CD の構成を検討する際に、そちらを解決すること | 16.2 V-02 / 16.3 |
 | 39 | 残課題 | **返金が未了のまま残った予約を検知する手段が無い。** キャンセルは DB を確定させてから返金するため、返金に失敗すると `status = cancelled` かつ `stripe_payment_intent_id IS NOT NULL` かつ `refunded_at IS NULL` の行が残る（4.3.18）。4.3.18 は「運用で追える」としているが、**気づく契機が存在しない**（10章にバッチが無く、A-11 の検索条件にも無い）。確定の失敗による返金漏れ（`pending` 側）も同じ形で残る。**工程6-d で `pending` 側だけは B-02 が毎回数えるようになった**（課金が残っているため倒せなかった件数を `PendingExpiry::$withCharge` が返し、コマンドが警告として出す。4.3.19）**が、`cancelled` 側には依然として契機が無い**。スケジュールで検知して通知する・A-11 に絞り込みを足す・管理画面のダッシュボード（A-02、7.16）の集計項目に加える、のいずれかを決めること。**金銭の不整合であり、気づくのが遅れるほど問い合わせが先に来る** | 4.3.18 / 4.3.19 / 8.2 / 17.3-5 / 10章 / 7.16 |
 | 38 | 残課題 | **顧客向けフォームの「※必須」が Blade に直接書かれている。** 20.1-3 は画面の文言を `lang/ja` に置き `__()` 経由で参照することを定めているが、P-34（`front/reservation/customer-form.blade.php`）と P-07（`front/lookup/lookup-form.blade.php`）が同じ綴りを直接持つ（**工程7-g の P-14（`front/contact/contact-form.blade.php`）も同じ前例に揃えた**）。工程5-n で P-07 を実装した際、P-34 の前例を踏襲した（片方だけ直すと綴りが2系統になるため）。**顧客向けの入力フォームが出揃う工程（P-02 会員登録。残課題26）で、必須表示の部品化とあわせてまとめて言語ファイルへ移すこと** | 20.1 / 7.9 / 7.19 |
 | 10 | 仕様 | ロゴ画像素材が未用意のため、共通レイアウトのヘッダー（7.2.1-1）は暫定的にテキストリンク（`front.header.logo_alt`）としている。素材が用意でき次第、画像に差し替えること | 7.2.1 |
@@ -3533,7 +3532,7 @@ T-01〜T-08は購入・運用フローの観点であり、シーダー（9章�
 
 **実行環境**
 
-`php artisan test` は実際の MariaDB（データベース名 `movi_testing`。開発用の `movi` とは別）に対して実行する。
+テスト（16.2 V-03）は実際の MariaDB（データベース名 `movi_testing`。開発用の `movi` とは別）に対して実行する。
 生成列とユニークインデックスのNULL重複許容（6.4.2）はMariaDB固有の挙動であり、
 SQLiteでは正しく検証できないため（3.5-4）。ローカルでの作成手順は README を参照。
 GitHub Actions（`.github/workflows/tests.yml`）も同一の `mariadb:10.11` イメージを用いる。
