@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\LogoutController;
 use App\Http\Middleware\AuthorizeAdminScreen;
 use App\Http\Middleware\EnsureAdminIsActive;
@@ -9,6 +8,7 @@ use App\Livewire\Admin\Auth\Login;
 use App\Livewire\Admin\Banners\Index as BannerIndex;
 use App\Livewire\Admin\Bookings\Index as BookingIndex;
 use App\Livewire\Admin\Cinemas\Index as CinemaIndex;
+use App\Livewire\Admin\Dashboard\Index as DashboardIndex;
 use App\Livewire\Admin\EntryGate\Index as EntryGateIndex;
 use App\Livewire\Admin\Formats\Index as FormatIndex;
 use App\Livewire\Admin\Movies\Index as MovieIndex;
@@ -26,11 +26,11 @@ use Illuminate\Support\Facades\Route;
 | 管理画面（4.8.5 A-01〜A-16）
 |--------------------------------------------------------------------------
 |
-| A-01（ログイン）・A-03（館マスタ）・A-04（シアター・座席）・A-05（映画マスタ）・
+| A-01（ログイン）・A-02（ダッシュボード）・A-03（館マスタ）・A-04（シアター・座席）・A-05（映画マスタ）・
 | A-06（上映規格マスタ）・A-07（券種・料金マスタ）・A-08（上映編成）・
 | A-09（上映回）・A-10（予約状況）・A-11（予約検索）・A-12（お知らせ）・
 | A-13（バナー）・A-14（管理者アカウント）・A-15（パスワード変更）・
-| A-16（入場ゲート）を実装。A-02（ダッシュボード）は最低限の実装（12章 残課題12）。
+| A-16（入場ゲート）を実装。
 |
 | 各画面への到達可否（4.8.2 / 4.8.5 / 17.1.3）は AuthorizeAdminScreen
 | ミドルウェアが `view-admin-screen` Gate（AppServiceProvider）で判定する。
@@ -43,7 +43,7 @@ Route::prefix('admin')->group(function (): void {
     Route::post('logout', LogoutController::class)->middleware('auth:admin')->name('admin.logout');
 
     Route::middleware(['auth:admin', EnsureAdminIsActive::class, AuthorizeAdminScreen::class])->name('admin.')->group(function (): void {
-        Route::get('/', DashboardController::class)->name('dashboard');
+        Route::get('/', DashboardIndex::class)->name('dashboard');
         Route::get('cinemas', CinemaIndex::class)->name('cinema.index');
         Route::get('theaters', TheaterIndex::class)->name('theater.index');
         Route::get('movies', MovieIndex::class)->name('movie.index');

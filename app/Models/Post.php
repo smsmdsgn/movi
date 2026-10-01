@@ -76,6 +76,23 @@ class Post extends Model
     }
 
     /**
+     * 顧客側に掲載されていない記事に絞る（`published()` の補集合）。下書き・公開日時なし・
+     * 公開予定（`published_at` が未来）のいずれか。A-02 の未公開件数（7.16-6）が使う。
+     * **境界を改める場合は `published()` と対で改めること。**
+     *
+     * @param  Builder<Post>  $query
+     * @return Builder<Post>
+     */
+    #[Scope]
+    protected function unpublished(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $scoped) => $scoped
+            ->where($this->qualifyColumn('status'), '!=', PostStatus::Published)
+            ->orWhereNull($this->qualifyColumn('published_at'))
+            ->orWhere($this->qualifyColumn('published_at'), '>', now()));
+    }
+
+    /**
      * @return BelongsTo<PostCategory, $this>
      */
     public function category(): BelongsTo
